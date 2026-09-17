@@ -411,21 +411,26 @@ function seatmap(host, valueBy, opts) {
   const min = vals.length ? Math.min(...vals) : 0;
   const max = vals.length ? Math.max(...vals) : 0;
 
+  const canvas = state.vmap.canvas || { w: 100, h: 74 };
   const svg = svgEl('svg', {
-    class: 'chart', viewBox: '0 0 100 100', preserveAspectRatio: 'xMidYMid meet',
+    class: 'chart', viewBox: `0 0 ${canvas.w} ${canvas.h}`,
+    preserveAspectRatio: 'xMidYMid meet',
     role: 'img', 'aria-label': o.aria || ('Target Center sections shaded by ' + o.label),
   });
-  svg.style.maxHeight = '620px';
+  svg.style.maxHeight = '640px';
 
   svg.append(svgEl('rect', { x: court.x, y: court.y, width: court.w, height: court.h,
-    rx: 1.2, fill: 'none', stroke: 'var(--axis)', 'stroke-width': 0.4 }));
-  const ct = svgEl('text', { x: 50, y: court.y + court.h / 2 + 1.1,
-    'text-anchor': 'middle', fill: 'var(--text-muted)', style: 'font-size:3px' });
+    rx: 1.0, fill: 'none', stroke: 'var(--axis)', 'stroke-width': 0.4 }));
+  const ct = svgEl('text', { x: court.x + court.w / 2, y: court.y + court.h / 2 + 1.0,
+    'text-anchor': 'middle', fill: 'var(--text-muted)', style: 'font-size:2.8px' });
   ct.textContent = 'COURT';
   svg.append(ct);
 
-  const sizes = { lower: [4.0, 4.8], upper: [5.0, 5.2], floor: [3.0, 3.2] };
-  const fonts = { lower: 2.1, upper: 2.3, floor: 1.9 };
+  // Footprints come from the geometry, so the map and the venue model cannot
+  // drift apart.
+  const sizes = state.vmap.tile_sizes || { lower: [5.6, 5.0], upper: [5.4, 5.4],
+    floor: [3.4, 3.0] };
+  const fonts = { lower: 2.1, upper: 2.2, floor: 1.7 };
   Object.entries(layout).forEach(([sec, pos]) => {
     const [w, h] = sizes[pos.tier] || [3.4, 4.6];
     const v = valueBy[sec];

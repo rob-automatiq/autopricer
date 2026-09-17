@@ -246,31 +246,94 @@ def test_every_sold_seat_quotes_without_error(model, snap):
 
 
 # ------------------------------------------------------------------ the layout
-def test_layout_covers_both_bowls_and_only_observed_floor(snap):
+#: The lower bowl as Target Center's published seat map has it. The gaps are
+#: real -- there is no section 102, 103, 105, 107 and so on.
+REAL_LOWER_BOWL = [
+    "101", "104", "106", "109", "110", "111", "112", "113", "116", "118",
+    "120", "121", "122", "124", "126", "129", "130", "131", "132", "133",
+    "136", "138",
+]
+
+
+def test_lower_bowl_matches_the_published_seat_map():
+    assert venue.LOWER_BOWL == REAL_LOWER_BOWL
+    assert len(venue.UPPER_BOWL) == 40
+    assert venue.UPPER_BOWL[0] == "201" and venue.UPPER_BOWL[-1] == "240"
+
+
+def test_layout_draws_every_section_in_the_data(snap):
+    """A section in the snapshot with nowhere to go would vanish from the map."""
     lay = venue.layout(floor_sections=snap.sections())
-    assert {"101", "138", "201", "240"} <= set(lay)
+    missing = [s for s in snap.sections() if s not in lay]
+    assert not missing, f"sections in the data but not on the map: {missing}"
+
+
+def test_layout_invents_no_sections(snap):
+    """The old generated ring drew 101-138, sixteen of which do not exist and
+    rendered as grey 'no data' tiles."""
+    lay = venue.layout(floor_sections=snap.sections())
+    known = set(snap.sections())
+    phantom = [s for s, v in lay.items()
+               if v["tier"] != "floor" and s not in known]
+    assert not phantom, f"map draws sections that do not exist: {phantom}"
     floor = {s for s, v in lay.items() if v["tier"] == "floor"}
-    assert floor == {"3", "6", "10"}, (
-        "the floor ring should only draw sections the data actually has, "
-        "since its real numbering is unknown"
-    )
+    assert floor == {"3", "6", "10"}
 
 
-def test_layout_spaces_neighbours_evenly(snap):
-    """Equal-angle spacing bunched tiles where the ellipse is flattest and made
-    neighbouring lower-bowl labels overlap; equal arc length fixes that."""
+def test_numbering_runs_clockwise_from_the_east_side(snap):
+    """101 faces the court from the east and 111 sits on the south edge. An
+    evenly spaced ellipse had them most of a quarter-turn away from that."""
     lay = venue.layout(floor_sections=snap.sections())
-    gaps = []
-    for a, b in zip(venue.LOWER_BOWL, venue.LOWER_BOWL[1:]):
-        pa, pb = lay[str(a)], lay[str(b)]
-        gaps.append(((pa["x"] - pb["x"]) ** 2 + (pa["y"] - pb["y"]) ** 2) ** 0.5)
-    assert max(gaps) / min(gaps) < 1.15, f"uneven tile spacing: {gaps}"
+    c = venue.court()
+    cx, cy = c["x"] + c["w"] / 2, c["y"] + c["h"] / 2
+
+    assert lay["101"]["x"] > cx and abs(lay["101"]["y"] - cy) < 4, "101 is not east"
+    assert lay["201"]["x"] > cx and abs(lay["201"]["y"] - cy) < 4, "201 is not east"
+    for sec in ("111", "112", "211"):
+        assert lay[sec]["y"] > cy, f"{sec} should sit south of the court"
+    for sec in ("131", "231"):
+        assert lay[sec]["y"] < cy, f"{sec} should sit north of the court"
+    for sec in ("121", "221"):
+        assert lay[sec]["x"] < cx, f"{sec} should sit west of the court"
+
+
+def test_neighbouring_sections_do_not_overlap(snap):
+    """Consecutive sections on a bowl edge must clear each other's footprint."""
+    lay = venue.layout(floor_sections=snap.sections())
+    for ring in (venue.LOWER_BOWL, venue.UPPER_BOWL):
+        w, h = venue.TILE_SIZES[lay[ring[0]]["tier"]]
+        need = min(w, h) * 0.9
+        for a, b in zip(ring, ring[1:]):
+            pa, pb = lay[a], lay[b]
+            d = ((pa["x"] - pb["x"]) ** 2 + (pa["y"] - pb["y"]) ** 2) ** 0.5
+            assert d >= need, f"{a} and {b} overlap: {d:.2f} < {need:.2f}"
 
 
 def test_layout_stays_on_canvas(snap):
+    cv = venue.canvas()
     for sec, p in venue.layout(floor_sections=snap.sections()).items():
-        assert 0 < p["x"] < 100, sec
-        assert 0 < p["y"] < 100, sec
+        w, h = venue.TILE_SIZES[p["tier"]]
+        half = max(w, h) / 2
+        assert half <= p["x"] <= cv["w"] - half, f"{sec} off canvas in x"
+        assert half <= p["y"] <= cv["h"] - half, f"{sec} off canvas in y"
+
+
+def test_tiles_face_the_court_on_octagonal_edges(snap):
+    lay = venue.layout(floor_sections=snap.sections())
+    for sec, p in lay.items():
+        assert p["angle"] % 45 == 0, f"{sec} angle {p['angle']} is not on a 45"
+    # North edge axis-aligned, east edge quarter-turned, corners on a diagonal.
+    # Angles are modulo 180: a rectangle rotated a half-turn is the same
+    # rectangle, so the south edge reads 0 like the north and the west reads
+    # 90 like the east.
+    for sec in ("231", "211", "227", "235", "129", "133", "111", "116"):
+        assert lay[sec]["angle"] == 0, f"{sec} sits on a flat N/S edge"
+    for sec in ("201", "221", "239", "101", "104", "138", "121"):
+        assert lay[sec]["angle"] == 90, f"{sec} sits on a flat E/W edge"
+    for sec in ("236", "216", "118", "136"):
+        assert lay[sec]["angle"] == 45, f"{sec} is a NE/SW corner"
+    for sec in ("226", "206", "124", "106"):
+        assert lay[sec]["angle"] == 135, f"{sec} is a NW/SE corner"
 
 
 # ------------------------------------------------------------------- the stats

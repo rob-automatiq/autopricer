@@ -239,5 +239,7 @@ def venue_map(snap: Snapshot) -> dict:
     return {
         "layout": venue.layout(floor_sections=present),
         "court": venue.court(),
+        "canvas": venue.canvas(),
+        "tile_sizes": {k: list(v) for k, v in venue.TILE_SIZES.items()},
         "sections_present": present,
     }

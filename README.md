@@ -113,10 +113,17 @@ be audited rather than taken on faith. The modelling constants all live in
 - **One game has no board.** Philadelphia (2027-03-13) has 45 sales and zero
   active listings. Its game level is recovered by inverting the pricing
   identity on those sales, and every quote for it carries a caveat.
-- **The bowl map is schematic.** Sections are placed at equal arc length around
-  two rings in numbering order, so adjacency is right but the positions are not
-  surveyed. The floor ring draws only the three courtside sections the data
-  actually contains, since the real floor numbering is not in the extract.
+- **The bowl map is transcribed, not generated.** Section centres in
+  `autopricer/venue.py` are read off Target Center's published seat map and
+  stored in that image's pixel space, with the arena edge each section sits on
+  so the tile lies flat along it. Worth knowing: the lower bowl is **not**
+  101-138 — the arena has 22 lower-bowl sections and the other sixteen numbers
+  in that range are not seating, which is why an earlier generated ring drew
+  sixteen sections that do not exist. Courtside is drawn only for the sections
+  the feed carries, and their placement against the map's `CS1`-`CS10` labels
+  is inferred from the numbering (it moves a tile, never a price). Club, suite,
+  table and theatre-box inventory is absent from the VividSeats feed, so it is
+  not drawn.
 - **No time-to-event decay.** Every quote is for the board as it stands today.
   Because each game's level is measured from its own current board, that is
   handled implicitly for pricing now, but the tool cannot answer "what should
