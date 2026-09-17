@@ -285,7 +285,7 @@ def test_rotation_helper_rejects_a_reordering():
 
 def test_layout_draws_every_section_in_the_data(snap):
     """A section in the snapshot with nowhere to go would vanish from the map."""
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     missing = [s for s in snap.sections() if s not in lay]
     assert not missing, f"sections in the data but not on the map: {missing}"
 
@@ -293,19 +293,28 @@ def test_layout_draws_every_section_in_the_data(snap):
 def test_layout_invents_no_sections(snap):
     """The old generated ring drew 101-138, sixteen of which do not exist and
     rendered as grey 'no data' tiles."""
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     known = set(snap.sections())
     phantom = [s for s, v in lay.items()
                if v["tier"] != "floor" and s not in known]
     assert not phantom, f"map draws sections that do not exist: {phantom}"
+
+
+def test_all_ten_courtside_sections_are_drawn(snap):
+    """The feed carries only three of them. The other seven are real seats with
+    no data, which is a grey tile, not an omission."""
+    lay = venue.layout()
     floor = {s for s, v in lay.items() if v["tier"] == "floor"}
-    assert floor == {"3", "6", "10"}
+    assert floor == {str(n) for n in range(1, 11)}
+    in_data = {s for s in snap.sections() if venue.tier(s) == "floor"}
+    assert in_data == {"3", "6", "10"}
+    assert in_data < floor, "every courtside section in the data must be drawn"
 
 
 def test_numbering_runs_clockwise_from_the_east_side(snap):
     """101 faces the court from the east and 111 sits on the south edge. An
     evenly spaced ellipse had them most of a quarter-turn away from that."""
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     c = venue.court()
     cx, cy = c["x"] + c["w"] / 2, c["y"] + c["h"] / 2
 
@@ -326,7 +335,7 @@ def test_no_two_tiles_overlap(snap):
     45-degree corner tile next to it, which a naive centre-distance check on
     consecutive sections passes straight over.
     """
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     items = sorted(lay.items())
     clashes = [
         f"{a}~{b}"
@@ -339,7 +348,7 @@ def test_no_two_tiles_overlap(snap):
 def test_spacing_is_even_around_each_ring(snap):
     """Every edge is section-count x spacing long, so the gap between
     neighbours is the same all the way round, corners included."""
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     for ring in (venue._LOWER, venue._UPPER):
         order = [s for e in venue._EDGE_ORDER for s in ring.edges[e]]
         gaps = [
@@ -355,7 +364,7 @@ def test_spacing_is_even_around_each_ring(snap):
 def test_no_dead_band_between_the_bowls(snap):
     """The 100 and 200 levels should read as one bowl, not two rings with a
     moat between them."""
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     for lower, upper, side in (("131", "231", "north"), ("111", "211", "south"),
                                ("101", "201", "east"), ("121", "221", "west")):
         bl, bu = venue.tile_bounds(lay[lower]), venue.tile_bounds(lay[upper])
@@ -367,7 +376,7 @@ def test_no_dead_band_between_the_bowls(snap):
 def test_courtside_matches_the_seat_map(snap):
     """CS1/CS2 east, CS3-CS5 south east-to-west, CS6/CS7 west, CS8-CS10 north
     west-to-east."""
-    lay = venue.layout(floor_sections=[str(n) for n in range(1, 11)])
+    lay = venue.layout()
     c = venue.court()
     north, south = c["y"], c["y"] + c["h"]
     east, west = c["x"] + c["w"], c["x"]
@@ -393,7 +402,7 @@ def test_courtside_matches_the_seat_map(snap):
 
 def test_layout_stays_on_canvas(snap):
     cv = venue.canvas()
-    for sec, p in venue.layout(floor_sections=snap.sections()).items():
+    for sec, p in venue.layout().items():
         x0, y0, x1, y1 = venue.tile_bounds(p)
         assert x0 >= -0.01 and x1 <= cv["w"] + 0.01, f"{sec} off canvas in x"
         assert y0 >= -0.01 and y1 <= cv["h"] + 0.01, f"{sec} off canvas in y"
@@ -402,12 +411,12 @@ def test_layout_stays_on_canvas(snap):
 def test_lower_bowl_sections_are_wider_than_upper(snap):
     """Six lower sections span what nine upper ones do, so their tiles are
     bigger -- as on the seat map."""
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     assert lay["131"]["w"] > lay["231"]["w"]
 
 
 def test_tiles_face_the_court_on_octagonal_edges(snap):
-    lay = venue.layout(floor_sections=snap.sections())
+    lay = venue.layout()
     for sec, p in lay.items():
         assert p["angle"] % 45 == 0, f"{sec} angle {p['angle']} is not on a 45"
     # North edge axis-aligned, east edge quarter-turned, corners on a diagonal.

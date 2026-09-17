@@ -431,7 +431,12 @@ function seatmap(host, valueBy, opts) {
     // the drawing cannot drift from the venue model. Lower-bowl sections are
     // genuinely wider than upper-bowl ones and come out that way.
     const w = pos.w, h = pos.h;
-    const font = Math.max(1.4, Math.min(3.4, h * 0.6, w * 0.5));
+    // Size the label from how many characters it has, not just the tile, so a
+    // three-digit upper-bowl number keeps clear air either side. Digits in a
+    // semibold sans run about 0.6em, and the text is held to ~66% of the
+    // tile's width; the height cap keeps the thin courtside strips legible.
+    const chars = Math.max(String(sec).length, 2);
+    const font = Math.max(1.0, Math.min(3.0, h * 0.62, (w * 0.66) / (chars * 0.6)));
     const v = valueBy[sec];
     const has = v !== null && v !== undefined;
     const step = seqStep(v, min, max);

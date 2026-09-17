@@ -237,7 +237,7 @@ def venue_map(snap: Snapshot) -> dict:
     """Static geometry plus the section list, for drawing the bowl."""
     present = snap.sections()
     return {
-        "layout": venue.layout(floor_sections=present),
+        "layout": venue.layout(),
         "court": venue.court(),
         "canvas": venue.canvas(),
         "sections_present": present,

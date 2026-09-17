@@ -29,7 +29,8 @@ What the layout takes from the published seat map is the part no formula knows:
   as "no data". The 22 here match the snapshot's section set exactly.
 * **Courtside.** CS1 and CS2 flank the east sideline, CS3 to CS5 run along the
   south baseline east to west, CS6 and CS7 the west sideline, CS8 to CS10 the
-  north baseline west to east.
+  north baseline west to east. All ten are drawn; the feed only carries three
+  of them, and the other seven shade grey like any other section with no data.
 
 Club, suite, table and theatre-box inventory (the map's C*, S*, TB* and TI*
 labels) is not drawn: none of it appears in the VividSeats feed, so there would
@@ -40,7 +41,6 @@ would sit.
 from __future__ import annotations
 
 import math
-from typing import Iterable
 
 TIER_FLOOR = "floor"
 TIER_LOWER = "lower"
@@ -226,25 +226,23 @@ def tier(section: str | None) -> str | None:
     return None
 
 
-def layout(floor_sections: Iterable[str] | None = None) -> dict:
+def layout() -> dict:
     """Return ``{section: {x, y, angle, w, h, tier}}`` on the drawing canvas.
 
-    Both bowls are drawn in full -- every number in them is a real section, so
-    one with no listings in scope is genuinely missing data rather than a gap
-    in the arena. Courtside is drawn only for the sections present in the
-    snapshot, since the feed exposes a few of the ten and an empty ring of them
-    would read as absent inventory.
+    Everything the arena has is drawn, all ten courtside strips included.
+    Every number here is a real section, so one with no listings in scope is
+    genuinely missing data rather than a gap in the seating -- which is what
+    lets the map shade an absent section grey and mean it. Only three of the
+    ten courtside sections appear in the VividSeats feed; the rest are drawn
+    and left grey rather than omitted, since a section that exists and has no
+    data is not the same as a section that does not exist.
     """
     out: dict[str, dict] = {}
     for ring, t in ((_LOWER, TIER_LOWER), (_UPPER, TIER_UPPER)):
         for sec, pos in ring.place().items():
             out[sec] = {**pos, "tier": t}
-
-    wanted = {s for s in (floor_sections or []) if tier(s) == TIER_FLOOR}
-    for sec in sorted(wanted, key=int):
-        pos = _COURTSIDE.get(sec)
-        if pos is not None:
-            out[sec] = {**pos, "tier": TIER_FLOOR}
+    for sec, pos in _COURTSIDE.items():
+        out[sec] = {**pos, "tier": TIER_FLOOR}
     return out
 
 
