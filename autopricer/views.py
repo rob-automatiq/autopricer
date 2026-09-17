@@ -75,6 +75,10 @@ def sales_by_section(snap: Snapshot, event: str | None = None) -> dict:
                 "gross": round(gross, 2),
                 "avg_price": round(gross / qty, 2) if qty else None,
                 "price": describe([r.price for r in rows]),
+                # The broker's side of the same sales, which is what Uptick
+                # reports. Absent on most rows, so it is summarised separately
+                # rather than mixed into the gross figures.
+                "net": describe([r.net for r in rows if r.net is not None]),
                 "margin_total": round(sum(margins), 2) if margins else None,
                 "margin_per_ticket": (
                     round(sum(margins) / cost_known_qty, 2) if cost_known_qty else None
@@ -100,6 +104,13 @@ def sales_by_section(snap: Snapshot, event: str | None = None) -> dict:
             b["gross"] += s.gross
             b["sales"] += 1
 
+    by_marketplace = defaultdict(lambda: {"tickets": 0, "gross": 0.0, "sales": 0})
+    for s in sales:
+        b = by_marketplace[s.marketplace]
+        b["tickets"] += s.qty
+        b["gross"] += s.gross
+        b["sales"] += 1
+
     by_type = defaultdict(lambda: {"tickets": 0, "gross": 0.0, "sales": 0})
     for s in sales:
         b = by_type[s.sale_type]
@@ -118,6 +129,7 @@ def sales_by_section(snap: Snapshot, event: str | None = None) -> dict:
                 round(sum(s.gross for s in sales) / total_qty, 2) if total_qty else None
             ),
             "sections_with_sales": len(by_sec),
+            "net_reported": sum(1 for s in sales if s.net is not None),
         },
         "sections": sections,
         "by_row": [
@@ -129,6 +141,11 @@ def sales_by_section(snap: Snapshot, event: str | None = None) -> dict:
             {"date": d, **{k: (round(v, 2) if isinstance(v, float) else v)
                            for k, v in b.items()}}
             for d, b in sorted(by_day.items())
+        ],
+        "by_marketplace": [
+            {"marketplace": m, **{k: (round(v, 2) if isinstance(v, float) else v)
+                                  for k, v in b.items()}}
+            for m, b in sorted(by_marketplace.items(), key=lambda kv: -kv[1]["tickets"])
         ],
         "by_type": [
             {"type": t, **{k: (round(v, 2) if isinstance(v, float) else v)
@@ -203,9 +220,12 @@ def section_detail(snap: Snapshot, section: str, event: str | None = None) -> di
         else snap.sales_for(section=section)
     )
 
-    by_row = defaultdict(lambda: {"listings": [], "sales": []})
+    by_row = defaultdict(lambda: {"listings": [], "sales": [], "net": []})
     for l in listings:
         by_row[l.row or "?"]["listings"].append(l.price)
+    for s in sales:
+        if s.net is not None:
+            by_row[s.row or "?"]["net"].append(s.net)
     for s in sales:
         by_row[s.row or "?"]["sales"].append(s.price)
 
@@ -219,6 +239,7 @@ def section_detail(snap: Snapshot, section: str, event: str | None = None) -> di
                 ),
                 "ask": describe(b["listings"]),
                 "sold": describe(b["sales"]),
+                "net": describe(b["net"]),
             }
         )
     rows.sort(key=lambda r: (r["row_ordinal"] is None, r["row_ordinal"] or 0, r["row"]))

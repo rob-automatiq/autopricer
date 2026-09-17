@@ -193,10 +193,16 @@
     if (!price || !qty || price <= 0 || qty <= 0) continue;
     if (!knownEvents.has(r.event_date)) continue;
     const cost = numOrNull(r.cost) || 0;
+    // `net` is total_sales_ost / qty -- the broker's side of the sale, and the
+    // figure Uptick shows. A 0 means the exchange never reported one, so it is
+    // carried as unknown rather than as a sale that paid nothing.
+    const net = numOrNull(r.net);
     sales.push({
       event_date: r.event_date, section: sec, tier: t,
       row: rowKey(r.row), row_ord: rowOrdinal(r.row),
       qty: Math.trunc(qty), price, cost,
+      net: (net && net > 0) ? net : null,
+      marketplace: (r.marketplace || '').trim() || 'unknown',
       invoice_date: r.invoice_date || null,
       sale_type: (r.sale_type || '').trim() || 'Unspecified',
       gross: price * Math.trunc(qty),
@@ -314,6 +320,7 @@
         tickets_sold: qty, gross: r2(gross),
         avg_price: qty ? r2(gross / qty) : null,
         price: describe(rs.map((s) => s.price)),
+        net: describe(rs.filter((s) => s.net !== null).map((s) => s.net)),
         margin_total: margins.length
           ? r2(margins.reduce((a, b) => a + b, 0)) : null,
         margin_per_ticket: costKnownQty
@@ -341,6 +348,10 @@
     const byDay = [...bucket((s) => s.invoice_date).entries()]
       .sort((a, b) => a[0] < b[0] ? -1 : 1)
       .map(([date, b]) => ({ date, tickets: b.tickets, gross: r2(b.gross), sales: b.sales }));
+    const byMarketplace = [...bucket((s) => s.marketplace).entries()]
+      .sort((a, b) => b[1].tickets - a[1].tickets)
+      .map(([marketplace, b]) => ({ marketplace, tickets: b.tickets,
+        gross: r2(b.gross), sales: b.sales }));
     const byType = [...bucket((s) => s.sale_type).entries()]
       .sort((a, b) => b[1].tickets - a[1].tickets)
       .map(([type, b]) => ({ type, tickets: b.tickets, gross: r2(b.gross), sales: b.sales }));
@@ -353,8 +364,10 @@
         sales: rows.length, tickets_sold: totalQty, gross: r2(totalGross),
         avg_price: totalQty ? r2(totalGross / totalQty) : null,
         sections_with_sales: bySec.size,
+        net_reported: rows.filter((s) => s.net !== null).length,
       },
-      sections, by_row: byRow, by_day: byDay, by_type: byType,
+      sections, by_row: byRow, by_day: byDay,
+      by_marketplace: byMarketplace, by_type: byType,
     };
   }
 
@@ -410,10 +423,11 @@
     const push = (row, kind, v) => {
       const k = row || '?';
       let b = keys.get(k);
-      if (!b) { b = { listings: [], sales: [] }; keys.set(k, b); }
+      if (!b) { b = { listings: [], sales: [], net: [] }; keys.set(k, b); }
       b[kind].push(v);
     };
     ls.forEach((l) => push(l.row, 'listings', l.price));
+    ss.forEach((s) => { if (s.net !== null) push(s.row, 'net', s.net); });
     ss.forEach((s) => push(s.row, 'sales', s.price));
 
     const rows = [...keys.entries()].map(([row, b]) => ({
@@ -424,6 +438,7 @@
       })(),
       ask: describe(b.listings),
       sold: describe(b.sales),
+      net: describe(b.net),
     }));
     rows.sort((a, b) => {
       const an = a.row_ordinal === null, bn = b.row_ordinal === null;
@@ -697,7 +712,8 @@
       },
       sales_used: salesDetail(event, section, sc.basis).slice(0, 12).map((s) => ({
         event: s.event_date, section: s.section, row: s.row, qty: s.qty,
-        price: r2(s.price), invoice_date: s.invoice_date,
+        price: r2(s.price), net: s.net === null ? null : r2(s.net),
+        marketplace: s.marketplace, invoice_date: s.invoice_date,
       })),
       caveats,
     };

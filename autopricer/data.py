@@ -68,7 +68,19 @@ class Listing:
 
 @dataclass(frozen=True)
 class Sale:
-    """One realised sale, priced per ticket."""
+    """One realised sale, priced per ticket.
+
+    Two sale figures come out of the lake and they are not the same number:
+
+    * ``price`` is ``total_sales / total_qty`` -- the gross, what the buyer
+      paid, including the exchange's fees.
+    * ``net`` is ``total_sales_ost / total_qty`` -- the Order Sold Total, the
+      broker's side of the same sale. **This is the figure Uptick shows.**
+
+    The model prices off ``price`` because ``net`` is absent on 59% of the
+    snapshot's sales, but both travel through to the UI so a quote can be
+    reconciled against Uptick instead of quietly disagreeing with it.
+    """
 
     event_date: str
     section: str
@@ -76,9 +88,11 @@ class Sale:
     row_ord: int | None
     qty: int
     price: float
+    net: float | None
     cost: float
     invoice_date: dt.date | None
     sale_type: str
+    marketplace: str
     tier: str
 
     @property
@@ -217,6 +231,9 @@ def load(data_dir: Path | str = DATA_DIR) -> Snapshot:
             if not price or not qty or price <= 0 or qty <= 0:
                 dropped["sale_bad_price_or_qty"] += 1
                 continue
+            # A net of 0 means the exchange never reported one, not a sale that
+            # paid the broker nothing, so it is carried as unknown.
+            net = _f(r.get("net"))
             sales.append(
                 Sale(
                     event_date=r["event_date"],
@@ -225,9 +242,11 @@ def load(data_dir: Path | str = DATA_DIR) -> Snapshot:
                     row_ord=row_ordinal(r["row"]),
                     qty=qty,
                     price=price,
+                    net=net if net and net > 0 else None,
                     cost=_f(r["cost"]) or 0.0,
                     invoice_date=_date(r["invoice_date"]),
                     sale_type=(r["sale_type"] or "").strip() or "Unspecified",
+                    marketplace=(r.get("marketplace") or "").strip() or "unknown",
                     tier=t,
                 )
             )

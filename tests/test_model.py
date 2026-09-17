@@ -52,6 +52,41 @@ def test_sales_and_listings_share_a_section_vocabulary(snap):
     assert len(lsec & ssec) >= 55
 
 
+def test_gross_and_net_are_both_carried(snap):
+    """Uptick reports total_sales_ost; this tool prices off total_sales. They
+    are different numbers, so both have to reach the UI or a quote silently
+    disagrees with the other system."""
+    with_net = [s for s in snap.sales if s.net is not None]
+    assert with_net, "snapshot should carry a net figure on some sales"
+    # Net is missing on most rows, which is why it is not the pricing basis.
+    assert len(with_net) < len(snap.sales) * 0.6
+    # A net of 0 is "not reported", never a sale that paid the broker nothing.
+    assert all(s.net > 0 for s in with_net)
+
+
+def test_the_reconciliation_case_from_the_report(snap):
+    """Section 209 row Q, Golden State on 2026-10-28: the tool showed $125.99
+    and Uptick showed $131.02. Same sale, two different columns."""
+    hits = [s for s in snap.sales
+            if s.event_date == "2026-10-28" and s.section == "209" and s.row == "Q"]
+    assert len(hits) == 1
+    sale = hits[0]
+    assert sale.qty == 2
+    assert sale.price == pytest.approx(125.99)
+    assert sale.net == pytest.approx(131.02)
+    assert sale.marketplace == "ticketmaster"
+
+
+def test_net_appears_in_a_quotes_comparable_sales(model):
+    q = model.recommend("2026-10-28", "209", "Q")
+    used = q["sales_used"]
+    assert used, "this seat has a comparable sale"
+    row = next(s for s in used if s["section"] == "209" and s["row"] == "Q")
+    assert row["price"] == pytest.approx(125.99)
+    assert row["net"] == pytest.approx(131.02)
+    assert row["marketplace"] == "ticketmaster"
+
+
 def test_zero_cost_is_treated_as_unknown_not_as_full_margin(snap):
     zero = [s for s in snap.sales if s.cost == 0]
     assert zero, "snapshot should contain rows with no captured cost"

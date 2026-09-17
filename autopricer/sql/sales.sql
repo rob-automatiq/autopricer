@@ -1,7 +1,15 @@
 -- Realised sales for Timberwolves 2026-27 home games, at section/row grain.
 --
 -- mcp_sales rows are per-invoice-line and already aggregated by seat block, so
--- total_sales / total_qty is the per-ticket price. Rows from all four POS
+-- dividing by total_qty gives a per-ticket figure.
+--
+-- TWO sale totals come back and they are not the same number:
+--   total_sales      gross -- what the buyer paid, including exchange fees
+--   total_sales_ost  Order Sold Total -- the broker's side of the same sale.
+--                    THIS IS WHAT UPTICK DISPLAYS.
+-- On this data they disagree by a few per cent in both directions, and OST is
+-- 0 on 59% of rows, so the model prices off gross and carries OST alongside
+-- for reconciliation. See the README. Rows from all four POS
 -- systems are kept: they are different brokers' sales, not duplicates of each
 -- other.
 --
@@ -10,7 +18,8 @@
 -- treats 0 as unknown rather than as 100% margin.
 --
 -- Produces: data/raw/sales.tsv
---   event_date  section  row  qty  price  cost  invoice_date  sale_type
+--   event_date  section  row  qty  price  net  cost  invoice_date  sale_type
+--   marketplace
 
 WITH tw AS (
   SELECT id, toString(date_of_event) AS event_date
@@ -28,9 +37,11 @@ SELECT
   ifNull(s.row, '')                                        AS row,
   s.total_qty                                              AS qty,
   round(s.total_sales / s.total_qty, 2)                     AS price,
+  round(ifNull(s.total_sales_ost, 0) / s.total_qty, 2)      AS net,
   round(ifNull(s.total_cost, 0) / s.total_qty, 2)           AS cost,
   toString(s.invoice_date)                                 AS invoice_date,
-  ifNull(s.type, '')                                       AS sale_type
+  ifNull(s.type, '')                                       AS sale_type,
+  ifNull(s.ms_company_name, '')                            AS marketplace
 FROM mcp_sales s
 INNER JOIN tw ON s.event_id = tw.id
 WHERE s.total_qty > 0

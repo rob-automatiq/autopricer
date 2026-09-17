@@ -590,6 +590,8 @@ class PricingModel:
                     "row": s.row,
                     "qty": s.qty,
                     "price": round(s.price, 2),
+                    "net": round(s.net, 2) if s.net is not None else None,
+                    "marketplace": s.marketplace,
                     "invoice_date": s.invoice_date.isoformat() if s.invoice_date else None,
                 }
                 for s in self._sales_detail(event, section, sale_basis)[:12]

@@ -110,6 +110,22 @@ be audited rather than taken on faith. The modelling constants all live in
   them, not of new instrumentation.
 - **Asks are not sales.** The comp set says what people are *asking*, and most
   listings never sell. The clearing ratio is the only correction applied.
+- **Gross vs net — this tool and Uptick quote different numbers for the same
+  sale.** `mcp_sales` carries two totals. `total_sales` is the gross the buyer
+  paid, including the exchange's fees; `total_sales_ost` (Order Sold Total) is
+  the broker's side of the same sale, and **that is the figure Uptick shows**.
+  For section 209 row Q against Golden State on 2026-10-28 they are $125.99 and
+  $131.02 per ticket.
+  The model prices off **gross**, for two reasons: OST is absent on 59% of the
+  snapshot's sales, and gross is the buyer-facing side of the trade, which is
+  the side an ask sits on. Both figures now travel through to the UI, so a
+  quote can be reconciled against Uptick rather than quietly disagreeing.
+  Worth knowing before trusting either: the lake documents
+  `total_sales >= total_sales_ost`, but on this data OST runs about **4% above**
+  gross for Ticketmaster and SeatGeek Full Service sales and about 2% below
+  elsewhere, with a handful of rows 20–40% out. At least one of the two columns
+  is not doing what its documentation says, which is worth settling with
+  whoever owns the pipeline.
 - **One game has no board.** Philadelphia (2027-03-13) has 45 sales and zero
   active listings. Its game level is recovered by inverting the pricing
   identity on those sales, and every quote for it carries a caveat.

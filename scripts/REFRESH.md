@@ -26,9 +26,12 @@ a day or two.
    `regular`. Games worth marking `marquee`: Christmas Day, and the Boston
    game carrying the Kevin Garnett jersey retirement.
 
-2. **Sales.** Run `sales.sql` and write the columns straight through. Note the
-   query already divides to a per-ticket price, and that a `cost` of `0` means
-   "not captured", which the loader treats as unknown.
+2. **Sales.** Run `sales.sql` and write the columns straight through. It
+   returns *two* per-ticket sale figures and they are not interchangeable:
+   `price` is the gross the buyer paid including exchange fees, and `net` is
+   `total_sales_ost`, the broker's side of the same sale — **the figure Uptick
+   displays**. A `0` in either `net` or `cost` means "not captured", which the
+   loader treats as unknown rather than as zero.
 
 3. **Listings.** Run `listings.sql`. The result is one row per event+section
    with the listings packed into a `row:price:qty:viewscore10` string, joined
@@ -70,6 +73,11 @@ a day or two.
   whatever price drift happened over that window. It is a directional
   calibration. Capturing daily listing snapshots over time is what would
   separate the two properly.
+- **Gross and net disagree, in both directions.** The lake documents
+  `total_sales >= total_sales_ost`, but on this data OST runs about 4% *above*
+  gross for Ticketmaster and SeatGeek Full Service sales and about 2% below
+  elsewhere, with a few rows 20-40% out. Do not "fix" one from the other; carry
+  both.
 - **Only VividSeats has coverage.** The seatgeek, ticketmaster and stubhub
   prism tables return zero rows for these events. If that changes, the board
   becomes a union and `listings.sql` needs a source column.

@@ -604,9 +604,11 @@ async function renderSales() {
     { h: 'Sales', get: (r) => num(r.sales) },
     { h: 'Tickets', get: (r) => num(r.tickets_sold) },
     { h: 'Gross', get: (r) => money(r.gross) },
-    { h: 'Avg price', get: (r) => money(r.avg_price) },
-    { h: 'Low', get: (r) => money(r.price.min) },
-    { h: 'High', get: (r) => money(r.price.max) },
+    { h: 'Avg gross / tkt', get: (r) => money(r.avg_price) },
+    { h: 'Gross low', get: (r) => money(r.price.min) },
+    { h: 'Gross high', get: (r) => money(r.price.max) },
+    { h: 'Net / tkt (Uptick)', get: (r) => money(r.net.median) },
+    { h: 'Net reported', get: (r) => `${r.net.n}/${r.sales}` },
     { h: 'Margin / ticket', get: (r) => money(r.margin_per_ticket) },
     { h: 'Rows', get: (r) => r.rows_sold.join(' ') || '—' },
   ], d.sections);
@@ -732,7 +734,8 @@ async function openSection(sec) {
     { h: 'Ask median', get: (r) => money(r.ask.median) },
     { h: 'Ask high', get: (r) => money(r.ask.max) },
     { h: 'Sales', get: (r) => num(r.sold.n) },
-    { h: 'Sold median', get: (r) => money(r.sold.median) },
+    { h: 'Sold gross median', get: (r) => money(r.sold.median) },
+    { h: 'Net median (Uptick)', get: (r) => money(r.net.median) },
   ], d.rows);
 
   const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -933,7 +936,11 @@ async function renderQuote() {
     const c2 = el('div', { className: 'card' });
     c2.append(el('h2', { textContent: 'Comparable sales used' }));
     c2.append(el('p', { className: 'note',
-      textContent: `Basis: ${dr.sale_comp_basis.replace(/_/g, ' ')}.` }));
+      textContent: `Basis: ${dr.sale_comp_basis.replace(/_/g, ' ')}. `
+        + 'Gross is what the buyer paid, including the exchange\u2019s fees, and is '
+        + 'what this model prices against. Net is the same sale from the '
+        + 'broker\u2019s side (total_sales_ost) \u2014 the figure Uptick reports \u2014 '
+        + 'and is blank where the exchange never sent one.' }));
     const w = el('div', { className: 'tablewrap' });
     c2.append(w);
     table(w, [
@@ -941,7 +948,9 @@ async function renderQuote() {
       { h: 'Section', get: (s) => s.section },
       { h: 'Row', get: (s) => s.row || '—' },
       { h: 'Qty', get: (s) => s.qty },
-      { h: 'Price / ticket', get: (s) => money(s.price) },
+      { h: 'Gross / tkt', get: (s) => money(s.price, 2) },
+      { h: 'Net / tkt (Uptick)', get: (s) => money(s.net, 2) },
+      { h: 'Marketplace', get: (s) => s.marketplace || '—' },
       { h: 'Invoiced', get: (s) => s.invoice_date || '—' },
     ], q.sales_used);
     host.append(c2);
