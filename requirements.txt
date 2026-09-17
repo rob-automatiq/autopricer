@@ -1,0 +1,3 @@
+# Runtime dependencies. Pinned so the image is reproducible.
+fastapi==0.141.1
+uvicorn[standard]==0.53.0

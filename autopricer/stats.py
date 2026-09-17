@@ -1,6 +1,6 @@
 """Small statistics helpers.
 
-Deliberately stdlib-only. ``statistics.quantiles`` needs at least two data
+No numpy, and not ``statistics.quantiles`` either: it needs at least two data
 points and cuts the distribution rather than interpolating a position within
 it, so percentiles are implemented directly here -- comp sets are routinely
 one or two listings deep and must still return an answer.

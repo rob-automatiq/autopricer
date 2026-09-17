@@ -226,6 +226,18 @@ def tier(section: str | None) -> str | None:
     return None
 
 
+def require_tier(section: str | None) -> str:
+    """:func:`tier`, but refusing a section the venue does not have.
+
+    The sentence is shown to whoever typed the section, and it is defined once
+    here so the API and the pricing engine cannot disagree about it.
+    """
+    t = tier(section)
+    if t is None:
+        raise ValueError(f"{section!r} is not a Target Center seat section")
+    return t
+
+
 def layout() -> dict:
     """Return ``{section: {x, y, angle, w, h, tier}}`` on the drawing canvas.
 

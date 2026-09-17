@@ -46,21 +46,16 @@ const rowAlpha = (o) => (o >= 1 && o <= 26) ? String.fromCharCode(64 + o) : Stri
 /**
  * Fetch an API payload.
  *
- * When `window.AUTOPRICER_LOCAL` is present the same payloads are computed
- * in-page from an embedded snapshot instead of being fetched -- that is how the
- * standalone build works. Everything downstream is identical either way, so
- * the UI has one implementation rather than two.
+ * Payloads are immutable for the life of a page -- the snapshot behind them
+ * only changes when the server refits -- so they are memoised per path.
+ * A failure carries the server's sentence in `error`; that sentence is written
+ * for whoever typed the bad input, so it is shown rather than replaced.
  */
 async function api(path) {
   if (state.cache.has(path)) return state.cache.get(path);
-  let body;
-  if (typeof window.AUTOPRICER_LOCAL === 'function') {
-    body = window.AUTOPRICER_LOCAL(path); // throws Error on bad input
-  } else {
-    const r = await fetch(path);
-    body = await r.json();
-    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
-  }
+  const r = await fetch(path);
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
   state.cache.set(path, body);
   return body;
 }
@@ -1108,15 +1103,10 @@ async function boot() {
   $('#snapshot').textContent = `${m.counts.events} home games · `
     + `${num(m.counts.listings)} live listings · ${num(m.counts.sales)} recorded sales · `
     + `clearing ratio ×${m.clearing_ratio}`;
-  const bundle = window.AUTOPRICER_BUNDLE;
   $('#footnote').innerHTML = 'Listings are a single VividSeats snapshot; the sales span the '
     + 'weeks before it, so the clearing ratio mixes the ask-to-clear spread with price drift '
     + 'over that window. '
-    + (bundle
-      ? `Standalone build — the snapshot is baked in as of ${bundle.today} and cannot `
-        + 'refresh itself. Re-pull it per <code>scripts/REFRESH.md</code>, then '
-        + '<code>python3 scripts/build_artifact.py</code>.'
-      : 'Refresh with <code>python3 -m autopricer refresh</code>.');
+    + 'Refresh with <code>python3 -m autopricer refresh</code>.';
 
   const gsel = $('#gamesel');
   gsel.textContent = '';

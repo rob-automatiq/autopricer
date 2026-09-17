@@ -58,6 +58,18 @@ a day or two.
    table above are a reference point, not an assertion — they move with the
    market.
 
+5. **Tell a running container.** `data/raw` is bind-mounted, so a restart is
+   not needed and neither is a rebuild:
+
+   ```bash
+   curl -X POST -H "X-Autopricer-Token: $AUTOPRICER_RELOAD_TOKEN" \
+     http://127.0.0.1:8765/api/reload
+   ```
+
+   It answers with the new snapshot's row counts. If the new files do not load
+   the call fails and the container keeps serving the previous snapshot, so a
+   bad refresh does not take the tool down.
+
 ## Things that will bite
 
 - **Section labels differ by source.** Listings say `"Lower Level 112"` and

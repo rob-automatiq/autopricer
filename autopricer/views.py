@@ -14,8 +14,17 @@ from .data import Snapshot
 from .stats import describe, median
 
 
-def _event_filter(event: str | None) -> str | None:
-    return None if event in (None, "", "all") else event
+def _event_filter(snap: Snapshot, event: str | None) -> str | None:
+    """Resolve the ``event`` query scope, rejecting a date with no home game.
+
+    ``None``, ``""`` and ``"all"`` all mean every game. Anything else has to
+    name a real one: an unrecognised date used to come back as a payload with
+    nothing in it, which reads like a game with no board rather than a typo.
+    """
+    if event in (None, "", "all"):
+        return None
+    snap.require_event(event)  # type: ignore[arg-type]
+    return event
 
 
 def event_overview(snap: Snapshot) -> list[dict]:
@@ -53,7 +62,7 @@ def event_overview(snap: Snapshot) -> list[dict]:
 
 def sales_by_section(snap: Snapshot, event: str | None = None) -> dict:
     """Feature 1: where the sales happened."""
-    event = _event_filter(event)
+    event = _event_filter(snap, event)
     sales = snap.sales_for(event) if event else snap.sales
 
     by_sec = defaultdict(list)
@@ -157,7 +166,7 @@ def sales_by_section(snap: Snapshot, event: str | None = None) -> dict:
 
 def listings_by_section(snap: Snapshot, event: str | None = None) -> dict:
     """Feature 2: the live board across sections."""
-    event = _event_filter(event)
+    event = _event_filter(snap, event)
     listings = snap.listings_for(event) if event else snap.listings
 
     by_sec = defaultdict(list)
@@ -210,7 +219,8 @@ def listings_by_section(snap: Snapshot, event: str | None = None) -> dict:
 
 def section_detail(snap: Snapshot, section: str, event: str | None = None) -> dict:
     """Row-by-row board and sale history for one section."""
-    event = _event_filter(event)
+    tier = venue.require_tier(section)
+    event = _event_filter(snap, event)
     listings = [
         l for l in (snap.listings_for(event, section) if event
                     else [x for x in snap.listings if x.section == section])
@@ -246,7 +256,7 @@ def section_detail(snap: Snapshot, section: str, event: str | None = None) -> di
 
     return {
         "section": section,
-        "tier": venue.tier(section),
+        "tier": tier,
         "scope": event or "all",
         "ask": describe([l.price for l in listings]),
         "sold": describe([s.price for s in sales]),

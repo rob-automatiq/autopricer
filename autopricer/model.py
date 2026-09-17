@@ -424,12 +424,8 @@ class PricingModel:
         strategy = strategy or self.p.default_strategy
         name, target_pct, floor_at_clear = self.p.strategy(strategy)
 
-        ev = self.snap.event(event)
-        if ev is None:
-            raise ValueError(f"unknown event {event!r}")
-        tier = venue.tier(section)
-        if tier is None:
-            raise ValueError(f"{section!r} is not a Target Center seat section")
+        ev = self.snap.require_event(event)
+        tier = venue.require_tier(section)
 
         target_ord = row_ordinal(row)
         rf_target = self.row_factor(tier, target_ord)

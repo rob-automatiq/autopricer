@@ -17,7 +17,7 @@ REFRESH_DOC = Path(__file__).resolve().parent.parent / "scripts" / "REFRESH.md"
 def cmd_serve(args) -> int:
     from .server import serve
 
-    serve(host=args.host, port=args.port)
+    serve(host=args.host, port=args.port, reload=args.reload)
     return 0
 
 
@@ -128,8 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("serve", help="run the dashboard and API")
-    s.add_argument("--host", default="127.0.0.1")
-    s.add_argument("--port", type=int, default=8765)
+    # Defaults are left to Settings so AUTOPRICER_HOST / AUTOPRICER_PORT can
+    # set them in a container without the CLI overriding the environment.
+    s.add_argument("--host", default=None, help="default 127.0.0.1")
+    s.add_argument("--port", type=int, default=None, help="default 8765")
+    s.add_argument("--reload", action="store_true",
+                   help="restart when the code changes (development)")
     s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser("price", help="quote one ticket")

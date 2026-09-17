@@ -9,15 +9,53 @@ Center**. Three things:
    price with the full reasoning behind it.
 
 ```bash
+docker compose up --build -d           # dashboard at http://127.0.0.1:8765
+docker compose logs -f autopricer
+```
+
+Or straight from a checkout:
+
+```bash
+pip install -r requirements-dev.txt
 python3 -m autopricer serve            # dashboard at http://127.0.0.1:8765
+python3 -m autopricer serve --reload    # restart on edits
 python3 -m autopricer price 2026-12-25 112 C
 python3 -m autopricer summary          # what the model learned
 python3 -m autopricer events           # board and sales depth per game
 python3 -m pytest tests -q
 ```
 
-No dependencies. Python 3.11 standard library only — `pytest` is needed for
-the tests, nothing else, and there is no build step for the front end.
+FastAPI and uvicorn, and nothing else at runtime — Python 3.11, no front-end
+build step, no database. The container and the CLI run the same application
+object (`autopricer.asgi:app`), so there is one code path to reason about.
+
+### Configuration
+
+All optional, all `AUTOPRICER_`-prefixed, read once at start-up
+(`autopricer/settings.py`). Deployment settings only — the modelling constants
+live in `autopricer/config.py` and belong in version control.
+
+| variable | default | |
+|---|---|---|
+| `AUTOPRICER_HOST` | `127.0.0.1` | the container sets `0.0.0.0` |
+| `AUTOPRICER_PORT` | `8765` | |
+| `AUTOPRICER_DATA_DIR` | `data/raw` | point it at a re-extracted snapshot |
+| `AUTOPRICER_CORS_ORIGINS` | none | comma-separated; same-origin otherwise |
+| `AUTOPRICER_RELOAD_TOKEN` | unset | unset disables `POST /api/reload` |
+| `AUTOPRICER_LOG_LEVEL` | `info` | |
+
+The snapshot is baked into the image *and* `data/raw` is a bind mount, so a
+refresh is: re-extract on the host, then
+
+```bash
+curl -X POST -H "X-Autopricer-Token: $AUTOPRICER_RELOAD_TOKEN" \
+  http://127.0.0.1:8765/api/reload
+```
+
+No rebuild and no restart. The reload loads and refits into a *new* bundle and
+swaps it in one assignment (`autopricer/state.py`), so a request can never be
+answered from a half-updated state, and a snapshot that fails to load leaves
+the running app serving the good one.
 
 ## The data
 
@@ -156,15 +194,21 @@ autopricer/
   normalize.py   section/row canonicalisation across the two sources
   venue.py       Target Center tiers and the schematic bowl geometry
   data.py        snapshot loading and indices
-  stats.py       percentiles, medians (stdlib only)
+  stats.py       percentiles, medians (no numpy)
   model.py       the three surfaces and the pricing engine
   views.py       dashboard aggregations
-  server.py      http.server JSON API + static files
+  state.py       the (snapshot, model) bundle and how it is replaced
+  api.py         FastAPI app: the JSON API and the dashboard it serves
+  asgi.py        `uvicorn autopricer.asgi:app` -- what the container runs
+  server.py      uvicorn in front of it, for `serve`
+  settings.py    deployment configuration from the environment
   cli.py         serve / price / summary / events / refresh
   sql/           the extract queries, versioned
 web/             dashboard (vanilla JS, hand-built SVG)
 data/raw/        the committed snapshot
-scripts/         REFRESH.md
+scripts/         REFRESH.md, check_game_scope.py
+Dockerfile       python:3.11-slim, non-root, read-only, healthchecked
+compose.yaml     port on loopback, snapshot bind-mounted
 ```
 
 ### API
@@ -179,5 +223,12 @@ scripts/         REFRESH.md
 | `GET /api/map` | bowl geometry |
 | `GET /api/model` | the fitted surfaces |
 | `GET /api/price?event=&section=&row=&qty=&strategy=` | a quote |
+| `GET /health` | liveness, plus which snapshot is loaded |
+| `POST /api/reload` | re-read the snapshot and refit (needs the token) |
 
-`event` accepts a game date or `all`.
+`event` accepts a game date or `all`. Interactive docs are at `/api/docs`.
+
+Bad input comes back as `400 {"error": "<sentence>"}` — `unknown event
+'1999-01-01'`, `'999' is not a Target Center seat section` — because the
+dashboard shows that sentence to whoever typed it. `tests/test_api.py` pins
+each one.

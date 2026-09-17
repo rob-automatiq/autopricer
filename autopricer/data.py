@@ -148,6 +148,18 @@ class Snapshot:
     def event(self, key: str) -> Event | None:
         return next((e for e in self.events if e.key == key), None)
 
+    def require_event(self, key: str) -> Event:
+        """:meth:`event`, but refusing a date that is not a home game.
+
+        Defined once so every caller rejects an unknown game with the same
+        sentence -- a view that quietly returned an empty payload instead used
+        to look like a game with no board.
+        """
+        ev = self.event(key)
+        if ev is None:
+            raise ValueError(f"unknown event {key!r}")
+        return ev
+
     def event_keys(self) -> list[str]:
         return [e.key for e in self.events]
 
