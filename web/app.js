@@ -426,13 +426,12 @@ function seatmap(host, valueBy, opts) {
   ct.textContent = 'COURT';
   svg.append(ct);
 
-  // Footprints come from the geometry, so the map and the venue model cannot
-  // drift apart.
-  const sizes = state.vmap.tile_sizes || { lower: [5.6, 5.0], upper: [5.4, 5.4],
-    floor: [3.4, 3.0] };
-  const fonts = { lower: 2.1, upper: 2.2, floor: 1.7 };
   Object.entries(layout).forEach(([sec, pos]) => {
-    const [w, h] = sizes[pos.tier] || [3.4, 4.6];
+    // Each tile carries its own footprint, derived from its ring's spacing, so
+    // the drawing cannot drift from the venue model. Lower-bowl sections are
+    // genuinely wider than upper-bowl ones and come out that way.
+    const w = pos.w, h = pos.h;
+    const font = Math.max(1.4, Math.min(3.4, h * 0.6, w * 0.5));
     const v = valueBy[sec];
     const has = v !== null && v !== undefined;
     const step = seqStep(v, min, max);
@@ -440,7 +439,8 @@ function seatmap(host, valueBy, opts) {
     const ink = has ? `var(--seq-${step}-ink)` : 'var(--seq-none-ink)';
 
     const g = svgEl('g', { transform: `translate(${pos.x} ${pos.y}) rotate(${pos.angle})` });
-    g.append(svgEl('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 0.7, fill }));
+    g.append(svgEl('rect', { x: -w / 2, y: -h / 2, width: w, height: h,
+      rx: Math.min(0.8, h / 4), fill }));
     {
       // Counter-rotate the label so it stays upright: the tile is tangential
       // to the ring, but text at the bottom of the bowl would otherwise be
@@ -449,7 +449,7 @@ function seatmap(host, valueBy, opts) {
       const t = svgEl('text', {
         transform: `rotate(${-pos.angle})`, x: 0, y: 0,
         'text-anchor': 'middle', 'dominant-baseline': 'central', fill: ink,
-        style: `font-size:${fonts[pos.tier] || 2.3}px;font-weight:600`,
+        style: `font-size:${font.toFixed(2)}px;font-weight:600`,
       });
       t.textContent = sec;
       g.append(t);
