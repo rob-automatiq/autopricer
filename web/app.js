@@ -42,11 +42,24 @@ function compact(v) {
 const num = (v) => (v === null || v === undefined) ? '—' : Number(v).toLocaleString('en-US');
 const rowAlpha = (o) => (o >= 1 && o <= 26) ? String.fromCharCode(64 + o) : String(o);
 
+/**
+ * Fetch an API payload.
+ *
+ * When `window.AUTOPRICER_LOCAL` is present the same payloads are computed
+ * in-page from an embedded snapshot instead of being fetched -- that is how the
+ * standalone build works. Everything downstream is identical either way, so
+ * the UI has one implementation rather than two.
+ */
 async function api(path) {
   if (state.cache.has(path)) return state.cache.get(path);
-  const r = await fetch(path);
-  const body = await r.json();
-  if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+  let body;
+  if (typeof window.AUTOPRICER_LOCAL === 'function') {
+    body = window.AUTOPRICER_LOCAL(path); // throws Error on bad input
+  } else {
+    const r = await fetch(path);
+    body = await r.json();
+    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+  }
   state.cache.set(path, body);
   return body;
 }
@@ -711,7 +724,8 @@ async function openSection(sec) {
     { h: 'Sold median', get: (r) => money(r.sold.median) },
   ], d.rows);
 
-  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  card.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'nearest' });
 }
 
 /* =================================================================== QUOTE */
@@ -937,9 +951,21 @@ async function renderModel() {
 
   const c1 = el('div', { className: 'card' });
   c1.append(el('h2', { textContent: 'Section quality index' }));
+  // Courtside runs x8-12 against a bowl that spans x0.4-2.9, so plotting all
+  // of them on one linear axis flattens every bowl section to a stub. The
+  // chart shows the bowl; the table below carries every section including the
+  // floor.
+  const floorIdx = Object.entries(m.section_index)
+    .filter(([, v]) => v.tier === 'floor')
+    .sort((a, b) => a[1].index - b[1].index);
+  const floorNote = floorIdx.length
+    ? ` Courtside (${floorIdx.map(([s]) => s).join(', ')}) runs `
+      + `×${floorIdx[0][1].index.toFixed(1)}–×${floorIdx[floorIdx.length - 1][1].index.toFixed(1)}`
+      + ' and is left off the chart so the bowl stays readable — it is in the table.'
+    : '';
   c1.append(el('p', { className: 'note',
     textContent: 'Median ask in the section ÷ median ask across the whole game, then the '
-      + 'median of that across games. ×1.00 is a typical seat.' }));
+      + 'median of that across games. ×1.00 is a typical seat.' + floorNote }));
   // Cards are attached before their charts are drawn, so each chart can
   // measure the width it will actually occupy.
   const bars = el('div');
@@ -948,11 +974,12 @@ async function renderModel() {
   host.append(c1);
 
   const secs = Object.entries(m.section_index);
-  barsH(bars, secs.slice(0, 18).map(([s, v]) => ({
+  const bowl = secs.filter(([, v]) => v.tier !== 'floor');
+  barsH(bars, bowl.slice(0, 18).map(([s, v]) => ({
     label: s, value: v.index, tipTitle: 'Section ' + s,
     tip: [['Index', '×' + v.index.toFixed(3)], ['Tier', v.tier], ['Games', v.games]],
   })), { fmt: (v) => '×' + v.toFixed(2), tickFmt: (v) => '×' + v.toFixed(1),
-    label: 'Index', aria: 'Section quality index, highest first' });
+    label: 'Index', aria: 'Section quality index for the bowl, highest first' });
   table(w1, [
     { h: 'Section', get: (r) => r[0], cls: 'sec' },
     { h: 'Tier', get: (r) => r[1].tier },
@@ -1039,9 +1066,15 @@ async function boot() {
   $('#snapshot').textContent = `${m.counts.events} home games · `
     + `${num(m.counts.listings)} live listings · ${num(m.counts.sales)} recorded sales · `
     + `clearing ratio ×${m.clearing_ratio}`;
+  const bundle = window.AUTOPRICER_BUNDLE;
   $('#footnote').innerHTML = 'Listings are a single VividSeats snapshot; the sales span the '
     + 'weeks before it, so the clearing ratio mixes the ask-to-clear spread with price drift '
-    + 'over that window. Refresh with <code>python3 -m autopricer refresh</code>.';
+    + 'over that window. '
+    + (bundle
+      ? `Standalone build — the snapshot is baked in as of ${bundle.today} and cannot `
+        + 'refresh itself. Re-pull it per <code>scripts/REFRESH.md</code>, then '
+        + '<code>python3 scripts/build_artifact.py</code>.'
+      : 'Refresh with <code>python3 -m autopricer refresh</code>.');
 
   const gsel = $('#gamesel'), psel = $('#p-game');
   gsel.textContent = '';
