@@ -347,9 +347,11 @@ td.sec { font-weight: 600; }
   <section class="panel" id="panel-price" role="tabpanel" aria-labelledby="tab-price" hidden>
     <div class="card">
       <div class="cardhead"><div><h2>Price a ticket</h2>
-        <p class="note">Pick the seat you are listing. The quote blends the live board in that section against realised sales for comparable seats.</p></div></div>
+        <p class="note">Pick the seat you are listing. The quote blends the live board in that
+          section against realised sales for comparable seats. It prices
+          <b id="p-gamename">the selected game</b> — change it with the Game selector at the
+          top of the page.</p></div></div>
       <div class="filters">
-        <div class="field"><label for="p-game">Game</label><select id="p-game"></select></div>
         <div class="field"><label for="p-section">Section</label><input id="p-section" list="sectionlist" placeholder="112" autocomplete="off"></div>
         <datalist id="sectionlist"></datalist>
         <div class="field"><label for="p-row">Row</label><input id="p-row" placeholder="C" autocomplete="off" size="4"></div>

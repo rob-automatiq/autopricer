@@ -13,6 +13,7 @@ const state = {
   meta: null, vmap: null, game: 'all', tab: 'sales', strategy: null,
   salesMetric: 'tickets_sold', listMetric: 'median_ask', cache: new Map(),
 };
+let allGamesOption = null;
 
 /* ------------------------------------------------------------------ utils */
 const $ = (s) => document.querySelector(s);
@@ -785,6 +786,16 @@ function boardStrip(host, q) {
 
 async function renderQuote() {
   const host = $('#quote');
+  // A quote is always for one specific game -- the one in the page's single
+  // Game selector. There used to be a second dropdown inside this card, which
+  // made it easy to read a quote for one game while looking at another.
+  const ev = state.meta.events.find((e) => e.key === state.game);
+  $('#p-gamename').textContent = ev ? ev.label : 'the selected game';
+  if (!ev) {
+    host.innerHTML = '<div class="card"><p class="empty">Pick a specific game in the '
+      + 'Game selector above — a quote is for one game, not all 35.</p></div>';
+    return;
+  }
   const section = $('#p-section').value.trim();
   if (!section) {
     host.innerHTML = '<div class="card"><p class="empty">Enter a section to get a quote.</p></div>';
@@ -793,7 +804,7 @@ async function renderQuote() {
   const strategy = state.strategy || state.meta.default_strategy;
   let q;
   try {
-    q = await api('/api/price?event=' + encodeURIComponent($('#p-game').value)
+    q = await api('/api/price?event=' + encodeURIComponent(state.game)
       + '&section=' + encodeURIComponent(section)
       + '&row=' + encodeURIComponent($('#p-row').value.trim())
       + '&qty=' + encodeURIComponent($('#p-qty').value || '2')
@@ -1037,6 +1048,18 @@ function selectTab(name) {
     $('#tab-' + n).setAttribute('aria-selected', String(n === name));
     $('#panel-' + n).hidden = n !== name;
   });
+  // "All games" is a valid scope for the sales and listings views but not for a
+  // quote, so it is taken off the selector while pricing. If it was the current
+  // scope, fall forward to the first game rather than showing a dead end.
+  const pricing = name === 'price';
+  if (allGamesOption) {
+    allGamesOption.disabled = pricing;
+    allGamesOption.hidden = pricing;
+  }
+  if (pricing && state.game === 'all' && state.meta.events.length) {
+    state.game = state.meta.events[0].key;
+    $('#gamesel').value = state.game;
+  }
   RENDER[name]().catch((e) => {
     $('#panel-' + name).insertAdjacentHTML('afterbegin',
       `<div class="card"><p class="empty err">${e.message}</p></div>`);
@@ -1076,15 +1099,17 @@ async function boot() {
         + '<code>python3 scripts/build_artifact.py</code>.'
       : 'Refresh with <code>python3 -m autopricer refresh</code>.');
 
-  const gsel = $('#gamesel'), psel = $('#p-game');
+  const gsel = $('#gamesel');
   gsel.textContent = '';
-  psel.textContent = '';
-  gsel.append(el('option', { value: 'all', textContent: `All ${m.counts.events} home games` }));
+  // Kept as a field so the "all games" scope can be disabled on the Price tab,
+  // where it is not a valid choice.
+  allGamesOption = el('option', { value: 'all',
+    textContent: `All ${m.counts.events} home games` });
+  gsel.append(allGamesOption);
   m.events.forEach((e) => {
-    const lab = `${e.key} · ${e.opponent}`
-      + (e.game_type === 'regular' ? '' : ` (${e.game_type})`);
-    gsel.append(el('option', { value: e.key, textContent: lab }));
-    psel.append(el('option', { value: e.key, textContent: lab }));
+    gsel.append(el('option', { value: e.key,
+      textContent: `${e.key} · ${e.opponent}`
+        + (e.game_type === 'regular' ? '' : ` (${e.game_type})`) }));
   });
   m.sections.forEach((s) => $('#sectionlist').append(el('option', { value: s })));
 
@@ -1101,7 +1126,6 @@ async function boot() {
   const debounce = () => { clearTimeout(t); t = setTimeout(renderQuote, 260); };
   ['#p-section', '#p-row', '#p-qty'].forEach((s) =>
     $(s).addEventListener('input', debounce));
-  $('#p-game').addEventListener('change', renderQuote);
 
   const btn = $('#themebtn');
   const current = () => document.documentElement.getAttribute('data-theme')
