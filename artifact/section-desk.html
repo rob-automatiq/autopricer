@@ -329,8 +329,8 @@
       <section class="card src-retail" id="retailcard">
         <header>
           <span class="tag retail">Retail</span>
-          <h2>Public market</h2>
-          <span class="sub" id="retailsub">Everyone&rsquo;s VividSeats asks, not your inventory</span>
+          <h2>VividSeats</h2>
+          <span class="sub" id="retailsub">Every seller&rsquo;s asks on this one exchange &mdash; not your inventory</span>
           <span class="stamp" id="retailstamp"></span>
         </header>
         <div id="retailbody"></div>
@@ -1149,7 +1149,10 @@ async function loadRetail(g, sec, ok, bag) {
       ['Transfer', (r) => (r.transfer_type || '').toLowerCase(), null],
       ['Section label', (r) => r.section_name, null],
       ['Inventory id', (r) => r.inventory_id, 'id'],
-    ], 'This is the whole retail market, not your inventory, and it is a <b>daily snapshot</b> (<code>processed_date</code>), not a live feed. <b>Ask</b> is the displayed price; <b>all-in</b> adds the exchange’s fees and is the number comparable to a sale’s gross.');
+    ], '<b>Anyone’s tickets, one exchange.</b> These are the asks a retail buyer sees on VividSeats for this game — your inventory and your competitors’ mixed together, with no seller identity in the feed, so a row here is <b>not</b> another source for one of your listings. That is why this is its own table. ' +
+      '<b>Ask</b> is the displayed price; <b>all-in</b> adds the exchange’s fees and is the figure comparable to a sale’s gross. ' +
+      'It is a <b>daily snapshot</b> (<code>processed_date</code>), newest partition only, not a live feed. ' +
+      'The lake has four sibling boards — SeatGeek, StubHub, Ticketmaster, Viagogo — and all four return <b>zero rows</b> for these games, so this is the only retail coverage there is. If that changes it becomes a union and the seller-mix caveat still holds.');
     renderRecon(bag);
   } catch (e) {
     if (!ok()) return;
