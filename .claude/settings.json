@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "mcp__Datalake_MCP__DataLakeInternalQuery",
-      "mcp__Datalake_MCP__DataLakeInternalInfo"
+      "mcp__Datalake_MCP__DataLakeInternalInfo",
+      "mcp__B2B_MCP__search_events",
+      "mcp__B2B_MCP__search_events_semantic",
+      "mcp__B2B_MCP__search_listings",
+      "mcp__B2B_MCP__echo"
     ]
   }
 }

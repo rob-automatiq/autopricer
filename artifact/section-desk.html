@@ -1,0 +1,1149 @@
+<title>Target Center Section Desk</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper:       #f4f5f2;
+    --surface:     #ffffff;
+    --surface-2:   #eceee9;
+    --line:        #dcdfd8;
+    --line-strong: #c3c7bd;
+    --ink:         #1a1f1c;
+    --ink-2:       #4d544e;
+    --ink-3:       #757c76;
+
+    /* Source identity. Each data source keeps one hue everywhere it appears --
+       the whole point of the page is that these are different universes. */
+    --pos:      #2a5d8f;
+    --pos-soft: #e6eef6;
+    --b2b:      #1c6b57;
+    --b2b-soft: #e2efea;
+    --retail:   #8a6524;
+    --retail-soft: #f3ece0;
+
+    --ok:   #1c6b57;
+    --warn: #8a6524;
+    --bad:  #a63d2f;
+    --bad-soft: #f8e9e6;
+
+    --shadow: 0 1px 2px rgba(20,30,24,.05), 0 1px 1px rgba(20,30,24,.04);
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:       #14171a;
+      --surface:     #1c2024;
+      --surface-2:   #24292e;
+      --line:        #2f353b;
+      --line-strong: #414950;
+      --ink:         #e7eae6;
+      --ink-2:       #a8b0ab;
+      --ink-3:       #7d857f;
+      --pos:      #7fb1e0;
+      --pos-soft: #1d2a36;
+      --b2b:      #6bc4a8;
+      --b2b-soft: #162a24;
+      --retail:   #d4a862;
+      --retail-soft: #2b2417;
+      --ok:   #6bc4a8;
+      --warn: #d4a862;
+      --bad:  #e9897a;
+      --bad-soft: #33201d;
+      --shadow: 0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:       #14171a;
+    --surface:     #1c2024;
+    --surface-2:   #24292e;
+    --line:        #2f353b;
+    --line-strong: #414950;
+    --ink:         #e7eae6;
+    --ink-2:       #a8b0ab;
+    --ink-3:       #7d857f;
+    --pos:      #7fb1e0;
+    --pos-soft: #1d2a36;
+    --b2b:      #6bc4a8;
+    --b2b-soft: #162a24;
+    --retail:   #d4a862;
+    --retail-soft: #2b2417;
+    --ok:   #6bc4a8;
+    --warn: #d4a862;
+    --bad:  #e9897a;
+    --bad-soft: #33201d;
+    --shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 0 56px; }
+
+  /* ---------------------------------------------------------- toolbar */
+  .top {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .top-in {
+    max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 12px;
+    display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end;
+  }
+  .brand { margin-right: auto; min-width: 0; }
+  .brand h1 {
+    margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em;
+    white-space: nowrap;
+  }
+  .brand p { margin: 1px 0 0; font-size: 12px; color: var(--ink-3); }
+  .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .fld > label {
+    font-size: 10px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  select, input[type="text"], button {
+    font-family: inherit; font-size: 13px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line-strong);
+    border-radius: 6px; padding: 7px 9px; min-height: 34px;
+  }
+  select { max-width: min(340px, calc(100vw - 48px)); }
+  input[type="text"] { width: 96px; font-family: var(--mono); font-weight: 500; }
+  button { cursor: pointer; font-weight: 500; }
+  button:hover:not(:disabled) { border-color: var(--ink-3); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--pos); outline-offset: 2px; }
+
+  /* ---------------------------------------------------------- layout */
+  .cols { display: grid; grid-template-columns: 364px minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 9px; box-shadow: var(--shadow); margin-bottom: 18px;
+    overflow: hidden;
+  }
+  .card > header {
+    display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline;
+    padding: 12px 14px; border-bottom: 1px solid var(--line);
+  }
+  .card > header h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .005em; }
+  .card > header .sub { font-size: 11.5px; color: var(--ink-3); margin-right: auto; }
+  .card > header .stamp {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .body { padding: 12px 14px; }
+  .body.flush { padding: 0; }
+
+  /* Source stripe: the card's left edge names where its numbers came from. */
+  .src-pos    { border-left: 3px solid var(--pos); }
+  .src-b2b    { border-left: 3px solid var(--b2b); }
+  .src-retail { border-left: 3px solid var(--retail); }
+
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .07em;
+    text-transform: uppercase; padding: 2px 6px; border-radius: 4px;
+  }
+  .tag.pos    { background: var(--pos-soft);    color: var(--pos); }
+  .tag.b2b    { background: var(--b2b-soft);    color: var(--b2b); }
+  .tag.retail { background: var(--retail-soft); color: var(--retail); }
+
+  /* ---------------------------------------------------------- seat map */
+  #map { display: block; width: 100%; height: auto; }
+  #map .tile { stroke: var(--line-strong); stroke-width: .18; cursor: pointer; }
+  #map .tile.empty { fill: var(--surface-2); }
+  #map .tile.has   { fill: color-mix(in srgb, var(--pos) 26%, var(--surface)); }
+  #map .tile.sel   { fill: var(--pos); stroke: var(--ink); stroke-width: .5; }
+  #map .lbl { font-family: var(--mono); font-size: 2.35px; fill: var(--ink-2); pointer-events: none; }
+  #map .tile.sel + .lbl { fill: #fff; font-weight: 600; }
+  #map .court { fill: none; stroke: var(--line-strong); stroke-width: .3; stroke-dasharray: 1.2 .9; }
+  #map .courtlbl { font-family: var(--sans); font-size: 2.6px; fill: var(--ink-3); letter-spacing: .3px; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px 14px 12px;
+    font-size: 11px; color: var(--ink-3); border-top: 1px solid var(--line);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--line-strong); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--mono); font-size: 11.5px; padding: 3px 7px;
+    border: 1px solid var(--line-strong); border-radius: 5px;
+    background: var(--surface); cursor: pointer; color: var(--ink-2);
+  }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  /* ---------------------------------------------------------- tiles */
+  .recon { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 1px; background: var(--line); }
+  .rtile { background: var(--surface); padding: 12px 14px; }
+  .rtile .k {
+    font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .rtile .v {
+    font-family: var(--mono); font-size: 23px; font-weight: 500; letter-spacing: -.02em;
+    margin-top: 4px; font-variant-numeric: tabular-nums;
+  }
+  .rtile .n { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+
+  /* ---------------------------------------------------------- tables */
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 6px 10px; text-align: left; white-space: nowrap; }
+  thead th {
+    position: sticky; top: 0; background: var(--surface-2); z-index: 1;
+    font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--ink-2); border-bottom: 1px solid var(--line-strong);
+  }
+  tbody tr { border-bottom: 1px solid var(--line); }
+  tbody tr:last-child { border-bottom: 0; }
+  tbody tr:hover { background: var(--surface-2); }
+  td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.id  { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  td.em  { font-weight: 600; }
+  .miss { color: var(--ink-3); }
+  .flag {
+    font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px;
+    background: var(--bad-soft); color: var(--bad);
+  }
+  .flag.ok { background: var(--b2b-soft); color: var(--ok); }
+
+  /* ---------------------------------------------------------- notes */
+  .note {
+    font-size: 12px; color: var(--ink-2); background: var(--surface-2);
+    border-top: 1px solid var(--line); padding: 10px 14px; margin: 0;
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note code, code {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--surface); padding: 1px 4px; border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  .state { padding: 22px 14px; text-align: center; color: var(--ink-3); font-size: 13px; }
+  .state.err { text-align: left; color: var(--ink); }
+  .state.err h3 { margin: 0 0 6px; font-size: 13px; color: var(--bad); }
+  .state.err p { margin: 0; font-size: 12.5px; color: var(--ink-2); max-width: 62ch; }
+  .skel {
+    height: 11px; border-radius: 3px; margin: 9px 0;
+    background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2));
+    background-size: 200% 100%; animation: sweep 1.4s linear infinite;
+  }
+  @keyframes sweep { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+  .foot { font-size: 11.5px; color: var(--ink-3); padding-block: 4px 0; max-width: 90ch; }
+  .foot p { margin: 0 0 6px; }
+</style>
+
+<div class="top">
+  <div class="top-in">
+    <div class="brand">
+      <h1>Target Center Section Desk</h1>
+      <p>Live from the data lake &middot; Timberwolves 2026&ndash;27</p>
+    </div>
+    <div class="fld">
+      <label for="game">Game</label>
+      <select id="game"><option>Loading games&hellip;</option></select>
+    </div>
+    <div class="fld">
+      <label for="sec">Section</label>
+      <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="209">
+    </div>
+    <div class="fld">
+      <label for="refresh">&nbsp;</label>
+      <button id="refresh" class="primary" type="button">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="cols">
+    <div>
+      <section class="card">
+        <header>
+          <h2>Bowl</h2>
+          <span class="sub" id="mapsub">Pick a section</span>
+        </header>
+        <div class="body flush"><svg id="map" role="img" aria-label="Target Center bowl map"></svg></div>
+        <div class="legend">
+          <span><i class="swatch" style="background:color-mix(in srgb,var(--pos) 26%,var(--surface))"></i>has activity</span>
+          <span><i class="swatch" style="background:var(--surface-2)"></i>none</span>
+          <span><i class="swatch" style="background:var(--pos)"></i>selected</span>
+        </div>
+      </section>
+      <section class="card" id="oddcard" hidden>
+        <header><h2>Sections off the map</h2><span class="sub">In the feed, not in the bowl layout</span></header>
+        <div class="body"><div class="chips" id="oddchips"></div></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="card" id="reconcard">
+        <header>
+          <h2 id="recontitle">Same seat, three prices</h2>
+          <span class="sub" id="reconsub">Each board quotes a different, legitimate number</span>
+        </header>
+        <div class="recon" id="recon"></div>
+        <p class="note" id="reconnote"></p>
+      </section>
+
+      <section class="card src-pos" id="salescard">
+        <header>
+          <span class="tag pos">Uptick / POS</span>
+          <h2>Sales</h2>
+          <span class="sub" id="salessub"></span>
+          <span class="stamp" id="salesstamp"></span>
+        </header>
+        <div id="salesbody"></div>
+      </section>
+
+      <section class="card src-b2b" id="b2bcard">
+        <header>
+          <span class="tag b2b">B2B</span>
+          <h2>Consignment board, now</h2>
+          <span class="sub" id="b2bsub">Live marketplace vs. the lake&rsquo;s copy</span>
+          <span class="stamp" id="b2bstamp"></span>
+        </header>
+        <div id="b2bbody"></div>
+      </section>
+
+      <section class="card src-b2b" id="b2bsoldcard">
+        <header>
+          <span class="tag b2b">B2B</span>
+          <h2>Consignment sold</h2>
+          <span class="sub" id="b2bsoldsub"></span>
+          <span class="stamp" id="b2bsoldstamp"></span>
+        </header>
+        <div id="b2bsoldbody"></div>
+      </section>
+
+      <section class="card src-pos" id="upcard">
+        <header>
+          <span class="tag pos">Uptick</span>
+          <h2>Autopricer state</h2>
+          <span class="sub" id="upsub">Push price, comp, floor and ceiling per listing</span>
+          <span class="stamp" id="upstamp"></span>
+        </header>
+        <div id="upbody"></div>
+      </section>
+
+      <section class="card src-retail" id="retailcard">
+        <header>
+          <span class="tag retail">Retail</span>
+          <h2>VividSeats board</h2>
+          <span class="sub" id="retailsub">The public ask board, for context</span>
+          <span class="stamp" id="retailstamp"></span>
+        </header>
+        <div id="retailbody"></div>
+      </section>
+
+      <div class="foot" id="foot"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* Bowl geometry, generated once from Target Center's published seat map and
+   baked in: 22 lower-bowl sections (the arena does not have 101-138), 40 upper,
+   10 courtside strips. Positions only -- every number on this page is live. */
+const VENUE = {"canvas":{"w":100.0,"h":70.0},"court":{"x":29.673,"y":24.159,"w":40.654,"h":21.682},"tiles":{"126":{"x":24.23,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"129":{"x":34.53,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"130":{"x":44.84,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"131":{"x":55.16,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"132":{"x":65.47,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"133":{"x":75.78,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"136":{"x":84.58,"y":15.89,"w":6.39,"h":6.39,"a":45.0,"t":"lower"},"138":{"x":88.22,"y":24.69,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"101":{"x":88.22,"y":35.0,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"104":{"x":88.22,"y":45.31,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"106":{"x":84.58,"y":54.11,"w":6.39,"h":6.39,"a":135.0,"t":"lower"},"109":{"x":75.78,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"110":{"x":65.47,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"111":{"x":55.16,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"112":{"x":44.84,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"113":{"x":34.53,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"116":{"x":24.23,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"118":{"x":15.43,"y":54.11,"w":6.39,"h":6.39,"a":45.0,"t":"lower"},"120":{"x":11.78,"y":45.31,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"121":{"x":11.78,"y":35.0,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"122":{"x":11.78,"y":24.69,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"124":{"x":15.43,"y":15.89,"w":6.39,"h":6.39,"a":135.0,"t":"lower"},"227":{"x":22.36,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"228":{"x":29.27,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"229":{"x":36.18,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"230":{"x":43.09,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"231":{"x":50.0,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"232":{"x":56.91,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"233":{"x":63.82,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"234":{"x":70.73,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"235":{"x":77.64,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"236":{"x":83.54,"y":5.51,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"237":{"x":88.42,"y":10.4,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"238":{"x":93.31,"y":15.28,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"239":{"x":95.75,"y":21.18,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"240":{"x":95.75,"y":28.09,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"201":{"x":95.75,"y":35.0,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"202":{"x":95.75,"y":41.91,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"203":{"x":95.75,"y":48.82,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"204":{"x":93.31,"y":54.72,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"205":{"x":88.42,"y":59.6,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"206":{"x":83.54,"y":64.49,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"207":{"x":77.64,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"208":{"x":70.73,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"209":{"x":63.82,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"210":{"x":56.91,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"211":{"x":50.0,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"212":{"x":43.09,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"213":{"x":36.18,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"214":{"x":29.27,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"215":{"x":22.36,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"216":{"x":16.46,"y":64.49,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"217":{"x":11.58,"y":59.6,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"218":{"x":6.69,"y":54.72,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"219":{"x":4.25,"y":48.82,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"220":{"x":4.25,"y":41.91,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"221":{"x":4.25,"y":35.0,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"222":{"x":4.25,"y":28.09,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"223":{"x":4.25,"y":21.18,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"224":{"x":6.69,"y":15.28,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"225":{"x":11.58,"y":10.4,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"226":{"x":16.46,"y":5.51,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"8":{"x":36.45,"y":22.36,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"9":{"x":50.0,"y":22.36,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"10":{"x":63.55,"y":22.36,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"3":{"x":63.55,"y":47.64,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"4":{"x":50.0,"y":47.64,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"5":{"x":36.45,"y":47.64,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"1":{"x":72.13,"y":29.58,"w":9.74,"h":2.6,"a":90.0,"t":"floor"},"2":{"x":72.13,"y":40.42,"w":9.74,"h":2.6,"a":90.0,"t":"floor"},"6":{"x":27.87,"y":40.42,"w":9.74,"h":2.6,"a":90.0,"t":"floor"},"7":{"x":27.87,"y":29.58,"w":9.74,"h":2.6,"a":90.0,"t":"floor"}}};
+
+const SEASON = { from: '2026-10-01', to: '2027-06-30' };
+const DL = 'Datalake MCP', DLQ = 'DataLakeInternalQuery';
+const B2B = 'B2B MCP', B2BL = 'search_listings';
+
+const state = { mcp: null, games: [], game: null, section: null, activity: new Map(), seq: 0 };
+const $ = (s) => document.querySelector(s);
+const el = (t, a) => Object.assign(document.createElement(t), a || {});
+
+/* ------------------------------------------------------------- helpers */
+const BOWL_PREFIX = /^(lower|upper|club|suite|main|balcony|mezzanine)\s+(level|lvl)\s+/i;
+
+/** Canonical section key. The feeds disagree: listings say "Lower Level 112"
+ *  and zero-pad the floor ("06"); sales say "112" and "06". */
+function secKey(raw) {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().replace(BOWL_PREFIX, '');
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+  return s.toUpperCase();
+}
+const money = (v, dp) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)))
+  ? null
+  : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: dp ?? 2, maximumFractionDigits: dp ?? 2 });
+const num = (v) => (v === null || v === undefined || v === '') ? null : Number(v).toLocaleString('en-US');
+function per(total, qty) {
+  // A missing total must stay missing: Number(null) is 0, which would print a
+  // confident "$0.00" for a figure the system never sent.
+  if (total === null || total === undefined || total === '') return null;
+  const t = Number(total), q = Number(qty);
+  if (!Number.isFinite(t) || !Number.isFinite(q) || q === 0) return null;
+  return t / q;
+}
+/** 0 means "this system never sent the figure", not "free". */
+const zeroIsUnknown = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n !== 0 ? n : null;
+};
+const sqlStr = (v) => "'" + String(v).replace(/[^A-Za-z0-9 ._:+-]/g, '') + "'";
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const median = (a) => {
+  if (!a.length) return null;
+  const s = a.slice().sort((x, y) => x - y), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+function stamp(node, res) {
+  const at = res && res.cache && res.cache.storedAt;
+  node.textContent = at
+    ? 'cached ' + new Date(at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : 'live';
+}
+
+/* ------------------------------------------------------- capability I/O */
+/** Branch the UI on the error code -- each one has a different fix, and a
+ *  single "something went wrong" hides the action that would repair the page. */
+function explain(e) {
+  const c = e && e.code;
+  const srv = (e && e.server) || 'the connector';
+  switch (c) {
+    case 'needs_reauth':
+      return { h: srv + ' needs reconnecting', p: 'Its credentials lapsed. Reconnect it in claude.ai Settings → Connectors, then refresh.' };
+    case 'server_not_connected':
+      return { h: srv + ' is not connected', p: 'Add it in claude.ai Settings → Connectors. This panel reads nothing until then.' };
+    case 'selection_required':
+      return { h: 'Two connectors share that name', p: 'Claude needs you to pick which ' + srv + ' to use. Choose one when prompted, then refresh.' };
+    case 'not_in_manifest':
+      return { h: srv + ' is off for this page', p: 'The connector was declined or switched off for this artifact, so this panel stays empty.' };
+    case 'blocked_by_policy':
+      return { h: 'Blocked by policy', p: 'Your organization does not allow this page to call ' + srv + '.' };
+    case 'approval_required':
+      return { h: 'Needs per-call approval', p: 'Policy requires approval for each call to ' + srv + ', which artifacts cannot request yet.' };
+    case 'server_unavailable':
+      return { h: srv + ' did not answer', p: 'The upstream is briefly unreachable. Refresh in a moment.', retry: true };
+    case 'tool_error':
+      return { h: 'The query was rejected', p: (e && e.message) || 'The connector ran the call and reported a failure.' };
+    case 'not_granted': case 'capability_disabled': case 'capability_removed':
+      return { h: 'Live data is not available in this view', p: 'This view cannot reach your connectors. Open the artifact from claude.ai to load live data.' };
+    case 'cancelled':
+      return { h: 'Call cancelled', p: 'The request was stopped before it finished.' };
+    default:
+      return { h: 'Could not reach ' + srv, p: (e && e.message) || 'Unexpected failure.', retry: !!(e && e.retryable) };
+  }
+}
+
+async function call(server, tool, input, opts) {
+  if (!state.mcp) throw { code: 'not_granted' };
+  return state.mcp.callTool(server, tool, input, opts || { cache: { staleTime: 45000 } });
+}
+
+/** One SQL round trip. The tool answers {result: "<json text>"}. */
+async function query(sql, notes, opts) {
+  const res = await call(DL, DLQ, { query: sql, notes: notes }, opts);
+  const p = res && res.payload;
+  let raw = p && typeof p === 'object' && 'result' in p ? p.result : p;
+  if (typeof raw !== 'string') return { rows: Array.isArray(raw) ? raw : [], res: res };
+  raw = raw.trim();
+  if (!raw.startsWith('[') && !raw.startsWith('{')) {
+    // Very large answers are spilled to a file and only the path comes back.
+    throw { code: 'tool_error', message: 'The answer was too large to return inline. Narrow the section or game.' };
+  }
+  let rows;
+  try { rows = JSON.parse(raw); } catch (_) { throw { code: 'tool_error', message: 'The connector returned something that is not JSON.' }; }
+  return { rows: Array.isArray(rows) ? rows : [rows], res: res };
+}
+
+/* ------------------------------------------------------------- the SQL */
+const evScope = (b2b) =>
+  '(SELECT id FROM mcp_events WHERE b2bexchangeeventid = ' + sqlStr(b2b) + ')';
+
+/* Games. One row per GAME, not per event row: mcp_events carries a row per POS
+   (-vs, -tn, -in, -oh) for the same game, and their status fields disagree, so
+   status is never filtered on. */
+const SQL_GAMES = `
+SELECT b2bexchangeeventid                      AS b2b_id,
+       any(vsexchangeeventid)                  AS vs_id,
+       min(toString(date_of_event))            AS event_date,
+       argMin(name, length(name))              AS name,
+       groupUniqArray(pos)                     AS pos_list,
+       groupUniqArray(ifNull(status, 'null'))  AS statuses,
+       count()                                 AS event_rows
+FROM mcp_events
+WHERE venue LIKE 'Target Center%'
+  AND date_of_event BETWEEN '${SEASON.from}' AND '${SEASON.to}'
+  AND lower(name) LIKE '%timberwolves%'
+  AND lower(name) NOT LIKE '%parking%'
+  AND lower(name) NOT LIKE '%season tickets%'
+  AND b2bexchangeeventid != ''
+GROUP BY b2bexchangeeventid
+ORDER BY event_date`;
+
+const sqlActivity = (b2b) => `
+SELECT 'sale' AS src, ifNull(s.section, '') AS section, count() AS n,
+       sum(s.total_qty) AS tickets,
+       round(median(s.total_sales / s.total_qty), 2) AS med_px
+FROM mcp_sales s
+WHERE s.event_id IN ${evScope(b2b)} AND s.total_qty > 0
+GROUP BY section
+UNION ALL
+SELECT 'b2b' AS src, ifNull(l.section, '') AS section, count() AS n,
+       sum(l.quantity) AS tickets, round(median(l.price), 2) AS med_px
+FROM mcp_lysted_listings l
+WHERE l.event_id_with_pos IN ${evScope(b2b)}
+  AND l.status IN ('ACTIVE', 'READY')
+  AND l.deleted_at IS NULL
+GROUP BY section`;
+
+const sqlSales = (b2b, sec) => `
+SELECT e.pos                                              AS pos,
+       e.id                                               AS event_row,
+       s.id                                               AS sale_id,
+       s.account_id                                       AS account_id,
+       s.ms_company_name                                   AS marketplace,
+       s.type                                             AS sale_type,
+       s.processor                                        AS processor,
+       s.if_brokergenius                                  AS priced_by_uptick,
+       s.section                                          AS section,
+       s.row                                              AS row,
+       s.total_qty                                        AS qty,
+       s.total_sales                                      AS gross_total,
+       s.total_sales_ost                                  AS ost_total,
+       s.total_cost                                       AS cost_total,
+       toString(s.invoice_date)                           AS invoice_date,
+       toString(s.invoice_date_time_utc)                  AS invoice_utc,
+       s.tags                                             AS tags,
+       s.anchor                                           AS anchor,
+       s.last_touched_email                               AS last_touched
+FROM mcp_sales s
+INNER JOIN mcp_events e ON s.event_id = e.id
+WHERE e.b2bexchangeeventid = ${sqlStr(b2b)}
+  AND s.section = ${sqlStr(sec)}
+ORDER BY s.invoice_date_time_utc DESC
+LIMIT 150`;
+
+const sqlB2bBoard = (b2b, sec) => `
+SELECT l.id                          AS listing_id,
+       l.organization_id             AS org_id,
+       l.section                     AS section,
+       l.row                         AS row,
+       l.quantity                    AS quantity,
+       l.price                       AS price,
+       l.total_cost                  AS total_cost,
+       l.status                      AS status,
+       l.stock_type                  AS stock_type,
+       l.broadcast                   AS broadcast,
+       l.auto_pricing_enabled        AS autopricing,
+       toString(l.seats)             AS seats,
+       toString(l.updated_at)        AS updated_at,
+       toString(l.processed_at)      AS processed_at,
+       u.push_price                  AS push_price,
+       u.cmp                         AS cmp,
+       u.floor                       AS floor_px,
+       u.ceiling                     AS ceiling_px,
+       u.group_mode                  AS group_mode,
+       toString(u.calculated_at)     AS priced_at
+FROM mcp_lysted_listings l
+LEFT JOIN mcp_uptick_pricing u ON u.listing_id = l.id
+WHERE l.event_id_with_pos IN ${evScope(b2b)}
+  AND l.section = ${sqlStr(sec)}
+  AND l.deleted_at IS NULL
+ORDER BY l.price
+LIMIT 150`;
+
+const sqlB2bSold = (b2b, sec) => `
+SELECT ls.sale_id                       AS sale_id,
+       ls.user_invoice_id               AS invoice_id,
+       ls.invoice_line_id               AS line_id,
+       ls.listing_id                    AS listing_id,
+       ls.externalref                   AS marketplace_ref,
+       ls.section                       AS section,
+       ls.row                           AS row,
+       ls.total_qty                     AS qty,
+       ls.total_sales                   AS gross_total,
+       ls.total_sales_ost               AS ost_total,
+       ls.saletotal                     AS sale_total,
+       ls.revenue                       AS revenue,
+       ls.revenue_ost                   AS revenue_ost,
+       ls.commission_rate               AS commission_rate,
+       ls.consigned                     AS consigned,
+       ls.organization_name             AS organization,
+       ls.parent_name                   AS parent,
+       ls.ms_company_name               AS marketplace,
+       ls.fulfillmentstatus             AS fulfillment,
+       toString(ls.invoice_date)        AS invoice_date
+FROM mcp_lysted_sales ls
+WHERE ls.event_id_with_pos IN ${evScope(b2b)}
+  AND ls.section = ${sqlStr(sec)}
+ORDER BY ls.invoice_date DESC
+LIMIT 150`;
+
+/* Retail board. Every numeric column in the prism tables is a String, and the
+   table keeps one snapshot per processed_date, so the newest partition is the
+   current board. */
+const sqlRetail = (vsId, sec) => `
+WITH latest AS (
+  SELECT max(processed_date) AS d
+  FROM mcp_prism_vividseats_event_listings
+  WHERE event_id = ${sqlStr(vsId)}
+)
+SELECT p.inventory_id                                  AS inventory_id,
+       p.section                                       AS section,
+       p.section_name                                  AS section_name,
+       p.row                                           AS row,
+       toUInt32OrNull(p.quantity)                      AS quantity,
+       toFloat64OrNull(p.price)                        AS price,
+       toFloat64OrNull(p.all_in_price_per_ticket)      AS all_in_per_ticket,
+       toFloat64OrNull(p.section_view_score)           AS view_score,
+       p.ticket_type                                   AS ticket_type,
+       p.transfer_type                                 AS transfer_type,
+       toString(p.processed_date)                      AS processed_date,
+       toString(p.processed_at)                        AS processed_at
+FROM mcp_prism_vividseats_event_listings p
+WHERE p.event_id = ${sqlStr(vsId)}
+  AND p.processed_date = (SELECT d FROM latest)
+  AND p.is_active
+  AND ${sqlStr(sec)} IN (p.section, p.section_name, concat('Lower Level ', ${sqlStr(sec)}), concat('Upper Level ', ${sqlStr(sec)}))
+ORDER BY all_in_per_ticket
+LIMIT 150`;
+
+/* ------------------------------------------------------------ rendering */
+function setState(hostId, kind, a, b) {
+  const host = $(hostId);
+  host.textContent = '';
+  if (kind === 'load') {
+    const d = el('div', { className: 'body' });
+    for (let i = 0; i < 3; i++) {
+      const s = el('div', { className: 'skel' });
+      s.style.width = (92 - i * 16) + '%';
+      d.append(s);
+    }
+    host.append(d);
+  } else if (kind === 'empty') {
+    host.append(el('div', { className: 'state', textContent: a }));
+  } else if (kind === 'err') {
+    const d = el('div', { className: 'state err' });
+    d.append(el('h3', { textContent: a.h }), el('p', { textContent: a.p }));
+    host.append(d);
+  }
+}
+
+/**
+ * Render one table. `cols` is [label, pick, kind] where kind is 'num' for
+ * right-aligned figures, 'id' for identifiers, 'em' for the emphasised value.
+ */
+function table(hostId, rows, cols, note) {
+  const host = $(hostId);
+  host.textContent = '';
+  const wrap = el('div', { className: 'scroll' });
+  const t = el('table');
+  const thead = el('thead'), htr = el('tr');
+  cols.forEach(([label, , kind]) => {
+    const th = el('th', { textContent: label });
+    if (kind === 'num') th.style.textAlign = 'right';
+    htr.append(th);
+  });
+  thead.append(htr);
+  const tb = el('tbody');
+  rows.forEach((r) => {
+    const tr = el('tr');
+    cols.forEach(([, pick, kind]) => {
+      const td = el('td');
+      if (kind) td.className = kind;
+      const v = pick(r);
+      if (v === null || v === undefined || v === '') {
+        td.append(el('span', { className: 'miss', textContent: '—' }));
+      } else if (v instanceof Node) {
+        td.append(v);
+      } else {
+        td.textContent = v;
+      }
+      tr.append(td);
+    });
+    tb.append(tr);
+  });
+  t.append(thead, tb);
+  wrap.append(t);
+  host.append(wrap);
+  if (note) host.append(el('p', { className: 'note', innerHTML: note }));
+}
+
+/* ------------------------------------------------------------- seat map */
+function drawMap() {
+  const svg = $('#map');
+  const c = VENUE.canvas;
+  svg.setAttribute('viewBox', '0 0 ' + c.w + ' ' + c.h);
+  svg.textContent = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs) => {
+    const n = document.createElementNS(ns, tag);
+    for (const k in attrs) if (attrs[k] !== null) n.setAttribute(k, attrs[k]);
+    return n;
+  };
+  const ct = VENUE.court;
+  svg.append(mk('rect', { x: ct.x, y: ct.y, width: ct.w, height: ct.h, rx: 1, class: 'court' }));
+  const cl = mk('text', {
+    x: ct.x + ct.w / 2, y: ct.y + ct.h / 2 + 1, class: 'courtlbl', 'text-anchor': 'middle',
+  });
+  cl.textContent = 'COURT';
+  svg.append(cl);
+
+  Object.keys(VENUE.tiles).forEach((sec) => {
+    const t = VENUE.tiles[sec];
+    const act = state.activity.get(sec);
+    const g = mk('g', {});
+    const rect = mk('rect', {
+      x: t.x, y: t.y, width: t.w, height: t.h, rx: .5,
+      transform: 'rotate(' + t.a + ' ' + (t.x + t.w / 2) + ' ' + (t.y + t.h / 2) + ')',
+      class: 'tile ' + (state.section === sec ? 'sel' : (act ? 'has' : 'empty')),
+    });
+    rect.append(mk('title', {}));
+    rect.querySelector('title').textContent = act
+      ? 'Section ' + sec + ' — ' + (act.sales || 0) + ' sales, ' + (act.b2b || 0) + ' B2B listings'
+      : 'Section ' + sec + ' — nothing on either board';
+    rect.addEventListener('click', () => pick(sec));
+    const label = mk('text', {
+      x: t.x + t.w / 2, y: t.y + t.h / 2 + .75, class: 'lbl', 'text-anchor': 'middle',
+    });
+    label.textContent = sec;
+    g.append(rect, label);
+    svg.append(g);
+  });
+}
+
+/* --------------------------------------------------------------- flow */
+function pick(sec) {
+  state.section = sec;
+  $('#sec').value = sec;
+  drawMap();
+  $('#mapsub').textContent = 'Section ' + sec;
+  loadSection();
+}
+
+async function loadGames() {
+  try {
+    const { rows } = await query(SQL_GAMES, 'Listing Timberwolves home games at Target Center, grouped by game rather than by POS event row.', { cache: { staleTime: 300000 } });
+    state.games = rows;
+    const sel = $('#game');
+    sel.textContent = '';
+    const today = new Date().toISOString().slice(0, 10);
+    rows.forEach((g) => {
+      const opp = String(g.name || '').replace(/ at Minnesota Timberwolves$/i, '')
+        .replace(/^Minnesota Timberwolves vs\.? /i, '');
+      sel.append(el('option', { value: g.b2b_id, textContent: g.event_date + ' · ' + opp }));
+    });
+    const next = rows.find((g) => g.event_date >= today) || rows[0];
+    if (!next) { setState('#salesbody', 'empty', 'No games found for this season.'); return; }
+    sel.value = next.b2b_id;
+    await setGame(next.b2b_id);
+  } catch (e) {
+    const x = explain(e);
+    ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
+    $('#recon').textContent = '';
+    $('#reconnote').innerHTML = '<b>' + esc(x.h) + '.</b> ' + esc(x.p);
+  }
+}
+
+async function setGame(b2bId) {
+  state.game = state.games.find((g) => g.b2b_id === b2bId) || null;
+  if (!state.game) return;
+  renderFoot();
+  await loadActivity();
+}
+
+async function loadActivity() {
+  const g = state.game;
+  if (!g) return;
+  const mine = ++state.seq;
+  try {
+    const { rows } = await query(sqlActivity(g.b2b_id), 'Per-section activity for one Timberwolves home game: sales across every POS, and currently live B2B consignment listings.');
+    if (mine !== state.seq) return;
+    const map = new Map();
+    rows.forEach((r) => {
+      const k = secKey(r.section);
+      if (!k) return;
+      const cur = map.get(k) || { sales: 0, b2b: 0, tickets: 0 };
+      if (r.src === 'sale') { cur.sales += Number(r.n) || 0; } else { cur.b2b += Number(r.n) || 0; }
+      cur.tickets += Number(r.tickets) || 0;
+      map.set(k, cur);
+    });
+    state.activity = map;
+    const odd = [...map.keys()].filter((k) => !VENUE.tiles[k]).sort();
+    const oddHost = $('#oddchips');
+    oddHost.textContent = '';
+    $('#oddcard').hidden = odd.length === 0;
+    odd.forEach((k) => {
+      const b = el('button', { className: 'chip', textContent: k, type: 'button' });
+      b.setAttribute('aria-pressed', String(state.section === k));
+      b.addEventListener('click', () => pick(k));
+      oddHost.append(b);
+    });
+    // Open on the busiest section so the page shows real work, not an empty shell.
+    if (!state.section || !map.has(state.section)) {
+      let best = null, bestN = -1;
+      map.forEach((v, k) => {
+        const n = v.sales * 2 + v.b2b;
+        if (n > bestN) { bestN = n; best = k; }
+      });
+      if (best) { state.section = best; $('#sec').value = best; $('#mapsub').textContent = 'Section ' + best; }
+    }
+    drawMap();
+    loadSection();
+  } catch (e) {
+    if (mine !== state.seq) return;
+    drawMap();
+    const x = explain(e);
+    ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
+  }
+}
+
+function loadSection() {
+  const g = state.game, sec = state.section;
+  if (!g || !sec) return;
+  const mine = ++state.seq;
+  const ok = () => mine === state.seq;
+  $('#recontitle').textContent = 'Section ' + sec + ' · ' + (g.event_date || '');
+  ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'load'));
+  $('#recon').textContent = '';
+  $('#reconnote').textContent = '';
+
+  const bag = { sales: null, board: null, live: null, sold: null };
+
+  loadSales(g, sec, ok, bag);
+  loadBoard(g, sec, ok, bag);
+  loadSold(g, sec, ok, bag);
+  loadRetail(g, sec, ok, bag);
+}
+
+async function loadSales(g, sec, ok, bag) {
+  try {
+    const { rows, res } = await query(sqlSales(g.b2b_id, sec), 'Every recorded sale for one section of one Timberwolves home game, across all four POS systems, with both sale totals for reconciliation against Uptick.');
+    if (!ok()) return;
+    stamp($('#salesstamp'), res);
+    bag.sales = rows;
+    const byPos = {};
+    rows.forEach((r) => { byPos[r.pos] = (byPos[r.pos] || 0) + 1; });
+    const tickets = rows.reduce((a, r) => a + (Number(r.qty) || 0), 0);
+    $('#salessub').textContent = rows.length
+      ? rows.length + ' sales · ' + tickets + ' tickets · ' +
+        Object.keys(byPos).sort().map((p) => p + ' ' + byPos[p]).join(', ')
+      : '';
+    if (!rows.length) {
+      setState('#salesbody', 'empty', 'Nothing sold in section ' + sec + ' for this game.');
+      renderRecon(bag);
+      return;
+    }
+    table('#salesbody', rows, [
+      ['Invoiced', (r) => (r.invoice_utc || '').slice(0, 16).replace('T', ' '), 'id'],
+      ['POS', (r) => r.pos, null],
+      ['Row', (r) => r.row, 'em'],
+      ['Qty', (r) => num(r.qty), 'num'],
+      ['Gross / tkt', (r) => money(per(r.gross_total, r.qty)), 'num'],
+      ['OST / tkt (Uptick)', (r) => money(per(zeroIsUnknown(r.ost_total), r.qty)), 'num'],
+      ['Cost / tkt', (r) => money(per(zeroIsUnknown(r.cost_total), r.qty)), 'num'],
+      ['Gross total', (r) => money(r.gross_total), 'num'],
+      ['OST total', (r) => money(zeroIsUnknown(r.ost_total)), 'num'],
+      ['Marketplace', (r) => r.marketplace, null],
+      ['Type', (r) => r.sale_type, null],
+      ['Uptick-priced', (r) => (r.priced_by_uptick === true ? 'yes' : r.priced_by_uptick === false ? 'no' : null), null],
+      ['Account', (r) => r.account_id, 'id'],
+      ['Processor', (r) => r.processor, null],
+      ['Tags', (r) => r.tags, null],
+      ['Anchor', (r) => r.anchor, null],
+      ['Event row', (r) => r.event_row, 'id'],
+      ['Sale id', (r) => r.sale_id, 'id'],
+    ], 'To find one of these in <b>Uptick</b>: <code>mcp_sales.id</code> is an internal hash, not an invoice number, so match on <b>account + event row + section/row + invoiced timestamp + marketplace + qty</b>. <b>OST</b> (<code>total_sales_ost</code>) is the figure Uptick displays; <b>gross</b> (<code>total_sales</code>) is what the buyer paid including exchange fees. A dash means the system never sent that figure — it is not a zero.');
+    renderRecon(bag);
+  } catch (e) {
+    if (!ok()) return;
+    setState('#salesbody', 'err', explain(e));
+  }
+}
+
+async function loadBoard(g, sec, ok, bag) {
+  let lake = null, lakeRes = null, live = null, liveErr = null;
+  try {
+    const r = await query(sqlB2bBoard(g.b2b_id, sec), 'Current B2B consignment listings for one section, joined to the Uptick autopricer state for each listing.');
+    lake = r.rows; lakeRes = r.res;
+  } catch (e) {
+    if (!ok()) return;
+    setState('#b2bbody', 'err', explain(e));
+    setState('#upbody', 'err', explain(e));
+    return;
+  }
+  if (!ok()) return;
+  try {
+    const res = await call(B2B, B2BL, { event_ids: [g.b2b_id] });
+    const p = res && res.payload;
+    live = Array.isArray(p) ? p : (p && Array.isArray(p.listings) ? p.listings : []);
+  } catch (e) { liveErr = e; }
+  if (!ok()) return;
+
+  stamp($('#b2bstamp'), lakeRes);
+  const liveHere = (live || []).filter((l) => secKey(l.section) === sec);
+  bag.board = lake; bag.live = liveHere;
+
+  // The reconciliation: the same board reached two independent ways. Match on
+  // row + quantity, which is what a human would eyeball.
+  const key = (row, qty) => String(row || '').trim().toUpperCase() + '|' + qty;
+  const liveBy = new Map();
+  liveHere.forEach((l) => liveBy.set(key(l.row, l.quantity), l));
+  const activeLake = lake.filter((r) => r.status === 'ACTIVE' || r.status === 'READY');
+
+  $('#b2bsub').textContent = activeLake.length + ' live in the lake · ' +
+    (liveErr ? 'marketplace unavailable' : liveHere.length + ' on the marketplace');
+
+  if (!lake.length && !liveHere.length) {
+    setState('#b2bbody', 'empty', 'No consignment inventory in section ' + sec + ' for this game.');
+    setState('#upbody', 'empty', 'No listings to price in section ' + sec + '.');
+    renderRecon(bag);
+    return;
+  }
+
+  table('#b2bbody', lake, [
+    ['Row', (r) => r.row, 'em'],
+    ['Qty', (r) => num(r.quantity), 'num'],
+    ['Lake price', (r) => money(r.price), 'num'],
+    ['Marketplace price', (r) => {
+      const m = liveBy.get(key(r.row, r.quantity));
+      return m ? money(Number(m.price) / 100) : null;
+    }, 'num'],
+    ['Agree', (r) => {
+      const m = liveBy.get(key(r.row, r.quantity));
+      const live = (r.status === 'ACTIVE' || r.status === 'READY');
+      if (!m) {
+        if (!live) return el('span', { className: 'miss', textContent: 'n/a — ' + (r.status || '?').toLowerCase() });
+        return el('span', { className: 'flag', textContent: 'not on marketplace' });
+      }
+      const d = Number(m.price) / 100 - Number(r.price);
+      return Math.abs(d) < 0.01
+        ? el('span', { className: 'flag ok', textContent: 'match' })
+        : el('span', { className: 'flag', textContent: (d > 0 ? '+' : '') + d.toFixed(2) });
+    }, null],
+    ['Status', (r) => r.status, null],
+    ['Broadcast', (r) => (r.broadcast === true ? 'yes' : r.broadcast === false ? 'no' : null), null],
+    ['Autopricing', (r) => (r.autopricing === true ? 'on' : r.autopricing === false ? 'off' : null), null],
+    ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
+    ['Stock', (r) => (r.stock_type || '').toLowerCase().replace(/_/g, ' '), null],
+    ['Seats', (r) => (r.seats || '').replace(/[\[\]"]/g, ''), 'id'],
+    ['Updated', (r) => (r.updated_at || '').slice(0, 16), 'id'],
+    ['Listing id', (r) => r.listing_id, 'id'],
+    ['Org', (r) => r.org_id, 'id'],
+  ], (liveErr
+      ? '<b>' + esc(explain(liveErr).h) + '.</b> ' + esc(explain(liveErr).p) + ' The lake column still reads live. '
+      : 'Two independent paths to the same board: <b>lake price</b> from <code>mcp_lysted_listings</code> (dollars) and <b>marketplace price</b> from the B2B connector (cents, converted). ') +
+    'They are snapshots taken moments apart, so a difference is a timing gap or a listing that is no longer broadcast — both are shown rather than hidden. Only <code>ACTIVE</code> and <code>READY</code> rows are on sale; <code>SOLD</code> rows are kept here because they explain an empty board.');
+
+  const priced = lake.filter((r) => r.push_price !== null && r.push_price !== undefined);
+  $('#upsub').textContent = priced.length + ' of ' + lake.length + ' listings carry Uptick pricing';
+  if (!priced.length) {
+    setState('#upbody', 'empty', 'None of section ' + sec + '’s listings are priced by Uptick.');
+  } else {
+    table('#upbody', priced, [
+      ['Row', (r) => r.row, 'em'],
+      ['Qty', (r) => num(r.quantity), 'num'],
+      ['Listed at', (r) => money(r.price), 'num'],
+      ['Push price', (r) => money(r.push_price), 'num'],
+      ['Comp (cmp)', (r) => money(r.cmp), 'num'],
+      ['Floor', (r) => money(r.floor_px), 'num'],
+      ['Ceiling', (r) => money(r.ceiling_px), 'num'],
+      ['At floor', (r) => (Number(r.push_price) <= Number(r.floor_px) + .005
+        ? el('span', { className: 'flag', textContent: 'yes' }) : 'no'), null],
+      ['Mode', (r) => r.group_mode, null],
+      ['Calculated', (r) => (r.priced_at || '').slice(0, 16), 'id'],
+      ['Listing id', (r) => r.listing_id, 'id'],
+    ], '<code>mcp_uptick_pricing</code> is a <b>daily snapshot</b>, not a live feed — every row in the table carries the same <code>calculated_at</code>. So <b>push price</b> is what Uptick last decided, and <b>listed at</b> is what the marketplace shows now; they diverge whenever a listing changed after the snapshot. Joined on <code>uptick_pricing.listing_id = lysted_listings.id</code>.');
+  }
+  renderRecon(bag);
+}
+
+async function loadSold(g, sec, ok, bag) {
+  try {
+    const { rows, res } = await query(sqlB2bSold(g.b2b_id, sec), 'Consignment sales for one section, with invoice identifiers and both sale totals, for spot-checking against the B2B system.');
+    if (!ok()) return;
+    stamp($('#b2bsoldstamp'), res);
+    bag.sold = rows;
+    $('#b2bsoldsub').textContent = rows.length ? rows.length + ' consignment sales' : '';
+    if (!rows.length) {
+      setState('#b2bsoldbody', 'empty', 'No consignment sales in section ' + sec + ' for this game.');
+      renderRecon(bag);
+      return;
+    }
+    table('#b2bsoldbody', rows, [
+      ['Invoiced', (r) => r.invoice_date, 'id'],
+      ['Row', (r) => r.row, 'em'],
+      ['Qty', (r) => num(r.qty), 'num'],
+      ['Gross / tkt', (r) => money(per(r.gross_total, r.qty)), 'num'],
+      ['OST / tkt', (r) => money(per(zeroIsUnknown(r.ost_total), r.qty)), 'num'],
+      ['Gross total', (r) => money(r.gross_total), 'num'],
+      ['OST total', (r) => money(zeroIsUnknown(r.ost_total)), 'num'],
+      ['Sale total', (r) => money(zeroIsUnknown(r.sale_total)), 'num'],
+      ['Commission', (r) => (r.commission_rate === null || r.commission_rate === undefined
+        ? null : (Number(r.commission_rate) * 100).toFixed(1) + '%'), 'num'],
+      ['Revenue', (r) => money(r.revenue), 'num'],
+      ['Revenue OST', (r) => money(r.revenue_ost), 'num'],
+      ['Marketplace', (r) => r.marketplace, null],
+      ['Fulfilment', (r) => r.fulfillment, null],
+      ['Consigned', (r) => (r.consigned === true ? 'yes' : r.consigned === false ? 'no' : null), null],
+      ['Organization', (r) => r.organization, null],
+      ['Parent', (r) => r.parent, null],
+      ['Marketplace ref', (r) => r.marketplace_ref, 'id'],
+      ['Sale id', (r) => r.sale_id, 'id'],
+      ['Line id', (r) => r.line_id, 'id'],
+      ['Listing id', (r) => r.listing_id, 'id'],
+      ['Invoice id', (r) => r.invoice_id, 'id'],
+    ], 'To find one of these in <b>B2B</b>: search the <b>marketplace ref</b> (<code>externalref</code>) or the numeric <b>sale id</b> / <b>line id</b>. <code>user_invoice_id</code> is a hash, so it is here for completeness rather than for typing. <b>Sale total</b> and <b>OST total</b> are the same figure in this table; <b>revenue</b> is commission × gross, which is why the two revenue columns differ by the same few per cent as the two totals.');
+    renderRecon(bag);
+  } catch (e) {
+    if (!ok()) return;
+    setState('#b2bsoldbody', 'err', explain(e));
+  }
+}
+
+async function loadRetail(g, sec, ok, bag) {
+  if (!g.vs_id) { setState('#retailbody', 'empty', 'This game has no VividSeats id, so there is no retail board to read.'); return; }
+  try {
+    const { rows, res } = await query(sqlRetail(g.vs_id, sec), 'The most recent VividSeats retail board snapshot for one section, for market context alongside the consignment board.');
+    if (!ok()) return;
+    stamp($('#retailstamp'), res);
+    bag.retail = rows;
+    const d = rows.length ? rows[0].processed_date : null;
+    $('#retailsub').textContent = rows.length
+      ? rows.length + ' asks · snapshot ' + d
+      : 'The public ask board, for context';
+    if (!rows.length) {
+      setState('#retailbody', 'empty', 'Section ' + sec + ' has no active VividSeats asks in the newest snapshot.');
+      renderRecon(bag);
+      return;
+    }
+    table('#retailbody', rows, [
+      ['Row', (r) => r.row, 'em'],
+      ['Qty', (r) => num(r.quantity), 'num'],
+      ['Ask', (r) => money(r.price), 'num'],
+      ['All-in / tkt', (r) => money(r.all_in_per_ticket), 'num'],
+      ['View score', (r) => (r.view_score === null || r.view_score === undefined ? null : Number(r.view_score).toFixed(1)), 'num'],
+      ['Ticket type', (r) => (r.ticket_type || '').toLowerCase(), null],
+      ['Transfer', (r) => (r.transfer_type || '').toLowerCase(), null],
+      ['Section label', (r) => r.section_name, null],
+      ['Inventory id', (r) => r.inventory_id, 'id'],
+    ], 'This is the whole retail market, not your inventory, and it is a <b>daily snapshot</b> (<code>processed_date</code>), not a live feed. <b>Ask</b> is the displayed price; <b>all-in</b> adds the exchange’s fees and is the number comparable to a sale’s gross.');
+    renderRecon(bag);
+  } catch (e) {
+    if (!ok()) return;
+    setState('#retailbody', 'err', explain(e));
+  }
+}
+
+/* --------------------------------------------------- the three prices */
+function renderRecon(bag) {
+  const host = $('#recon');
+  const tiles = [];
+  const add = (k, hue, v, n) => tiles.push({ k, hue, v, n });
+
+  const sales = bag.sales || [];
+  const last = sales[0];
+  if (last) {
+    add('Last sale, gross', 'var(--pos)', money(per(last.gross_total, last.qty)),
+      'Row ' + (last.row || '?') + ' ×' + last.qty + ' · ' + (last.invoice_date || '') + ' · buyer paid, incl. fees');
+    const ost = per(zeroIsUnknown(last.ost_total), last.qty);
+    add('Same sale, OST', 'var(--pos)', ost ? money(ost) : '—',
+      ost ? 'What Uptick displays for this sale' : 'This POS never sent an OST figure');
+  }
+  const live = (bag.live || []).map((l) => Number(l.price) / 100).filter(Number.isFinite);
+  const lakeLive = (bag.board || []).filter((r) => r.status === 'ACTIVE' || r.status === 'READY')
+    .map((r) => Number(r.price)).filter(Number.isFinite);
+  const b2bGetIn = live.length ? Math.min(...live) : (lakeLive.length ? Math.min(...lakeLive) : null);
+  if (b2bGetIn !== null) {
+    add('B2B get-in', 'var(--b2b)', money(b2bGetIn),
+      (live.length ? live.length : lakeLive.length) + ' consignment listings · median ' +
+      (money(median(live.length ? live : lakeLive)) || '—'));
+  }
+  const retail = (bag.retail || []).map((r) => Number(r.all_in_per_ticket)).filter(Number.isFinite);
+  if (retail.length) {
+    add('Retail get-in', 'var(--retail)', money(Math.min(...retail)),
+      retail.length + ' public asks, all-in · median ' + (money(median(retail)) || '—'));
+  }
+
+  host.textContent = '';
+  if (!tiles.length) {
+    host.append(el('div', { className: 'rtile' }));
+    host.firstChild.append(el('div', { className: 'state', textContent: 'No activity on any board for this section.' }));
+    $('#reconnote').innerHTML = '';
+    return;
+  }
+  tiles.forEach((t) => {
+    const d = el('div', { className: 'rtile' });
+    const k = el('div', { className: 'k' });
+    const dot = el('i', { className: 'dot' });
+    dot.style.background = t.hue;
+    k.append(dot, document.createTextNode(t.k));
+    d.append(k, el('div', { className: 'v', textContent: t.v || '—' }), el('div', { className: 'n', textContent: t.n }));
+    host.append(d);
+  });
+  $('#reconnote').innerHTML = 'These are <b>not</b> the same quantity and should not agree. ' +
+    '<b>Gross</b> is what a buyer paid including the exchange’s fees; <b>OST</b> is the broker’s side of that same sale, which is the number Uptick shows; ' +
+    '<b>B2B get-in</b> is the cheapest consignment ask right now; <b>retail get-in</b> is the cheapest public all-in ask in the newest board snapshot. ' +
+    'A gap between them is the market, not an error.';
+}
+
+function renderFoot() {
+  const g = state.game;
+  if (!g) return;
+  const statuses = (g.statuses || []).join(', ');
+  $('#foot').innerHTML =
+    '<p><b>' + esc(g.name || '') + '</b> · ' + esc(g.event_date) + ' · B2B <code>' + esc(g.b2b_id) + '</code>' +
+    (g.vs_id ? ' · VividSeats <code>' + esc(g.vs_id) + '</code>' : '') + '</p>' +
+    '<p>This game is <b>' + g.event_rows + ' rows</b> in <code>mcp_events</code> — one per POS (' +
+    esc((g.pos_list || []).join(', ')) + ') — and those rows carry <b>conflicting statuses</b> (' + esc(statuses) + '). ' +
+    'Every query on this page scopes by <code>b2bexchangeeventid</code> and reads all of them, so nothing is lost to a single POS row; status is never filtered on.</p>' +
+    '<p>Section labels are canonicalised the same way on both sides (<code>Lower Level 112</code> and <code>112</code> are one section; <code>06</code> is <code>6</code>), which is what lets the boards be compared at all.</p>';
+}
+
+/* --------------------------------------------------------------- boot */
+function bindUI() {
+  $('#game').addEventListener('change', (e) => { state.section = null; setGame(e.target.value); });
+  const secIn = $('#sec');
+  const commit = () => {
+    const k = secKey(secIn.value);
+    if (k) pick(k); else secIn.value = state.section || '';
+  };
+  secIn.addEventListener('change', commit);
+  secIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
+  $('#refresh').addEventListener('click', async () => {
+    const b = $('#refresh');
+    b.disabled = true; b.textContent = 'Refreshing…';
+    try {
+      if (state.mcp && state.mcp.invalidate) { try { await state.mcp.invalidate(); } catch (_) { /* nothing cached */ } }
+      await loadActivity();
+    } finally { b.disabled = false; b.textContent = 'Refresh'; }
+  });
+}
+
+async function boot() {
+  bindUI();
+  drawMap();
+  ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'load'));
+  $('#reconnote').textContent = 'Reading the data lake…';
+
+  let mcp = null;
+  try { mcp = window.claude && window.claude.use ? await window.claude.use('mcp') : null; } catch (_) { mcp = null; }
+  state.mcp = mcp;
+  if (!mcp) {
+    const x = explain({ code: 'not_granted' });
+    ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
+    $('#recon').textContent = '';
+    $('#reconnote').innerHTML = '<b>' + esc(x.h) + '.</b> ' + esc(x.p);
+    $('#game').textContent = '';
+    $('#game').append(el('option', { textContent: 'Live data unavailable' }));
+    return;
+  }
+  await loadGames();
+}
+
+boot();
+</script>

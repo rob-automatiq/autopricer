@@ -1,0 +1,154 @@
+# Reading this data without getting it wrong
+
+Everything here was verified against the lake on 2026-09-18. Each item is a way
+the data has already misled a working tool, or would have.
+
+## 1. An event is not a row. It is a group of rows.
+
+`mcp_events` carries **one row per POS system** for the same game — suffixes
+`-vs` (VividSeats), `-tn` (Ticket Network), `-in` (Indy/Lysted), `-oh`. For
+Timberwolves home games this season:
+
+```
+88 event rows  ->  36 games
+```
+
+Scope every query by **`b2bexchangeeventid`** and read all the rows in the
+group. The row's own `id` is what `mcp_sales.event_id` and
+`mcp_lysted_*.event_id_with_pos` point at, so a query that picks one row per
+game silently drops the sales booked against the others.
+
+**This already cost us.** The retired snapshot collapsed each game to one event
+row, and so reported:
+
+| | snapshot | actual (all POS) | lost |
+|---|---|---|---|
+| sales | 570 | **592** | 22 |
+| tickets | 1,434 | **1,491** | 57 |
+| gross | $394,598.44 | **$407,182.09** | $12,583.65 |
+
+Sales split by POS, season-wide: `vs` 427, `in` 127, `tn` 21, `oh` 17.
+
+## 2. `status` contradicts itself between rows of the same game
+
+The same game can be `Cancelled` on one POS row and `ACTIVE` on another, and a
+`Cancelled` row still carries sales:
+
+- Toronto, 2026-10-25 — `7432907-vs` is `Cancelled`, `8205287-tn` is `ACTIVE`.
+- Golden State, 2026-10-28 — `7432835-vs` is `Cancelled` and holds **42 sales**.
+
+Do not filter on `status`. It describes one exchange's view of the listing, not
+whether the game is happening.
+
+## 3. Every game's cross-system ids are already in `mcp_events`
+
+`b2bexchangeeventid`, `vsexchangeeventid`, `tmexchangeeventid`,
+`sgexchangeeventid`, `tnexchangeeventid`, `ohexchangeeventid`,
+`tmdiscoveryeventid`. The B2B one matches the B2B catalog's short ids exactly
+(`APMD65Q3` = 2026-10-25 Toronto, `DPYXDNPM` = 2026-10-28 Golden State), so a
+game selected in one system maps provably to the same game in the other. There
+is no need to match on name or date.
+
+## 4. Gross and OST are different quantities, and both are real
+
+`mcp_sales` carries two order totals. Divide either by `total_qty` for a
+per-ticket figure.
+
+| column | what it is |
+|---|---|
+| `total_sales` | gross — what the buyer paid, including the exchange's fees |
+| `total_sales_ost` | Order Sold Total — the broker's side of the same sale. **This is what Uptick displays.** |
+
+A `0` in `total_sales_ost` or `total_cost` means *this POS never sent the
+figure*, not zero. Coverage is a POS artifact, not randomness:
+
+| POS | OST populated |
+|---|---|
+| `in` | 127 / 127 |
+| `tn` | 21 / 21 |
+| `oh` | 6 / 17 |
+| `vs` | 98 / 427 |
+
+The lake documents `total_sales >= total_sales_ost`. **That does not hold.** OST
+runs a few per cent *above* gross on Ticketmaster and SeatGeek Full Service
+sales and a couple of per cent below elsewhere, with outliers 20–40% out. Carry
+both; never derive one from the other. Worth settling with whoever owns the
+pipeline.
+
+## 5. There are two listing universes. Never mix them.
+
+**B2B / consignment** — your inventory.
+
+- Live: `B2B MCP` → `search_listings({event_ids: [b2bexchangeeventid]})`.
+  Prices are **integer cents**. Carries section, row, quantity, seats,
+  stock type, in-hand date.
+- In the lake: `mcp_lysted_listings`, joined by
+  `event_id_with_pos IN (<the game's event ids>)`. Prices are **dollars**.
+  Live means `status IN ('ACTIVE','READY') AND deleted_at IS NULL`; `SOLD` rows
+  stay in the table and explain an empty board.
+- Sold: `mcp_lysted_sales`, at section/row grain, with `sale_id`,
+  `invoice_line_id`, `externalref` (the marketplace ref) and
+  `user_invoice_id` (a hash, not a typeable invoice number).
+
+**Retail** — the whole public market. `mcp_prism_vividseats_event_listings` and
+its seatgeek / stubhub / ticketmaster / viagogo siblings, keyed on the bare
+exchange event id (`7432835`, not `7432835-vs`). Two traps: **every numeric
+column is a `String`** (`toFloat64OrNull`, `toUInt32OrNull`), and the table
+keeps one snapshot per `processed_date` — the newest partition is the current
+board. `price` is the displayed ask; `all_in_price_per_ticket` includes fees and
+is the figure comparable to a sale's gross.
+
+Of the five retail boards, only VividSeats had coverage for these games when
+last checked.
+
+## 6. Uptick's pricing state is a daily snapshot
+
+`mcp_uptick_pricing` — `push_price`, `cmp`, `floor`, `ceiling`, `group_mode`.
+1.2M rows, and **every one carries the same `calculated_at`** (13:00 UTC on the
+day checked). It is a once-a-day dump, not a live feed, so a listing repriced
+after the dump will disagree with it — that gap is information, not an error.
+
+The join is `mcp_uptick_pricing.listing_id = mcp_lysted_listings.id` (84 of 106
+matched on a sample game). It does **not** join to
+`mcp_sync_listings.inventory_id`.
+
+## 7. Section labels differ by source
+
+Listings prefix the bowl and zero-pad the floor (`Lower Level 112`, `06`); sales
+carry the bare number (`112`, `06`). Canonicalise both to a prefix-free number
+with no leading zeros, or the two sides will never meet. `7th St.` is a parking
+listing. **Rows `I` and `O` are real rows** at Target Center (sections 207, 215,
+227, 228) — do not "fix" them to 1 and 0.
+
+## 8. The bowl is not 101–138
+
+Target Center has **22 lower-bowl sections**: 101, 104, 106, 109, 110, 111, 112,
+113, 116, 118, 120, 121, 122, 124, 126, 129, 130, 131, 132, 133, 136, 138. The
+other numbers in that range are not seating. Plus 40 upper (201–240) and 10
+courtside strips. `artifact/venue.json` holds the positions.
+
+## 9. B2B *transactions* have no seat location
+
+`mcp_b2b_transactions` is order-grain: buyer, seller, `tickets_quantity`,
+`total_amount`, `order_source`, `status` — and **no section or row**. Section-level
+B2B work has to come from `mcp_lysted_listings` / `mcp_lysted_sales` instead.
+
+## 10. One worked example
+
+Section 209, row Q, Golden State on 2026-10-28 — four legitimate numbers for
+one seat:
+
+| figure | value | source |
+|---|---|---|
+| buyer gross | $125.99 / tkt | `mcp_sales.total_sales / total_qty` |
+| Uptick OST | $131.02 / tkt | `mcp_sales.total_sales_ost / total_qty` |
+| consignment ask, live | $133.36 | `B2B MCP` listing `ZN236GX2`, 13336 cents |
+| consignment sale | $127.25 gross / $131.02 OST | `mcp_lysted_sales` sale `12509213` |
+
+If a tool shows one of these without saying which, it is wrong by omission.
+
+## Result-size limit
+
+The Datalake MCP spills a large answer to a file and returns the path instead of
+the rows. Keep queries narrow (one game, one section, a `LIMIT`) and treat a
+payload that is not JSON as "too large", not as data.
