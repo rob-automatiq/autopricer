@@ -283,6 +283,26 @@ The lake price is the broker's own list price, and it equals
 which is the useful thing about it, and a reason to keep it on screen rather
 than hide it behind the marketplace figure.
 
+## 14a. The two systems disagree about a listing's quantity — never match on it
+
+Section 235 row U for the 2026-10-28 game is **one** listing,
+`mcp_lysted_listings.id = 24276274`:
+
+| | quantity | price |
+|---|---|---|
+| lake | **10** | $111.63 |
+| B2B screen and API | **6** | $118.49 (= 111.63 × 1.0615) |
+
+Match a lake listing to its marketplace counterpart on **row**, then by nearest
+price. Keying on row + quantity splits a listing that exists in both into
+"lake only" plus "marketplace only", which reads as one listing missing and one
+phantom appearing — and the section then looks like it is hiding inventory.
+
+Carry both quantities through to whatever you build. There is no correct single
+number: `mcp_sync_listings` has a `shown_quantity` column alongside `quantity`,
+so a listing holding ten tickets while offering six is a normal state, not a
+fault.
+
 ## 15. B2B's event list disagrees with B2B's own listing view
 
 For 2026-10-28, B2B's event-list row reports **157 listings, 606 tickets,

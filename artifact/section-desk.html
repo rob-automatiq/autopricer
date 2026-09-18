@@ -996,21 +996,46 @@ async function loadBoard(g, sec, ok, bag) {
 
   // The reconciliation: the same board reached two independent ways. Match on
   // row + quantity, which is what a human would eyeball.
-  const key = (row, qty) => String(row || '').trim().toUpperCase() + '|' + qty;
-  const liveBy = new Map();
-  liveHere.forEach((l) => liveBy.set(key(l.row, l.quantity), l));
+  /* Match on ROW, then pair by nearest price -- never on quantity.
+     The two systems disagree about quantity on the same listing: section 235
+     row U is one listing (24276274) that the lake holds as 10 tickets at
+     $111.63 and B2B shows as 6 at $118.49. Keying the match on row+quantity
+     split it into "lake, not on B2B" plus "B2B, not in lake", so a listing
+     that is present in both looked like one missing and one phantom. */
+  const rowKey = (row) => String(row || '').trim().toUpperCase();
+  const pool = new Map();            // row -> unclaimed B2B listings
+  liveHere.forEach((l) => {
+    const k = rowKey(l.row);
+    if (!pool.has(k)) pool.set(k, []);
+    pool.get(k).push(l);
+  });
   const activeLake = lake.filter(onSale);
+
+  // On-sale lake rows claim first: a SOLD row should not take the live
+  // marketplace listing away from the row that is actually on sale.
+  const matchOf = new Map();
+  [...lake].sort((a, b) => (onSale(b) ? 1 : 0) - (onSale(a) ? 1 : 0)).forEach((r) => {
+    const cands = pool.get(rowKey(r.row));
+    if (!cands || !cands.length) return;
+    const want = Number(r.price);
+    let bestI = 0;
+    if (Number.isFinite(want) && want > 0 && cands.length > 1) {
+      let bestD = Infinity;
+      cands.forEach((c, i) => {
+        const shown = Math.floor(Number(c.price) / 1.03) / 100;
+        const d = Math.abs(shown - want);
+        if (d < bestD) { bestD = d; bestI = i; }
+      });
+    }
+    matchOf.set(r, cands.splice(bestI, 1)[0]);
+  });
 
   // The board is the UNION of both sources. A listing the marketplace is
   // showing but the lake has not caught up on is the single most important row
   // on this page -- rendering only the lake's rows hid it completely.
-  const matched = new Set();
-  lake.forEach((r) => {
-    const k = key(r.row, r.quantity);
-    if (liveBy.has(k)) matched.add(k);
-  });
-  const marketOnly = liveHere
-    .filter((l) => !matched.has(key(l.row, l.quantity)))
+  const marketOnly = [];
+  pool.forEach((left) => left.forEach((l) => marketOnly.push(l)));
+  const marketOnlyRows = marketOnly
     .map((l) => ({
       market_only: true,
       listing_id: l.id,
@@ -1026,11 +1051,17 @@ async function loadBoard(g, sec, ok, bag) {
       total_cost: null, deleted_at: '', updated_at: null, org_id: null,
       push_price: null, cmp: null, floor_px: null, ceiling_px: null,
     }));
-  const rows = lake.concat(marketOnly);
+  const rows = lake.concat(marketOnlyRows);
   const marketCents = (r) => {
     if (r.market_only) return r.market_cents;
-    const m = liveBy.get(key(r.row, r.quantity));
+    const m = matchOf.get(r);
     return m ? Number(m.price) : null;
+  };
+  /** The quantity B2B is showing, which is not always the lake's quantity. */
+  const marketQty = (r) => {
+    if (r.market_only) return r.quantity;
+    const m = matchOf.get(r);
+    return m ? m.quantity : null;
   };
   const marketPrice = (r) => {
     const c = marketCents(r);
@@ -1074,7 +1105,17 @@ async function loadBoard(g, sec, ok, bag) {
   table('#b2bbody', rows, [
     ...secCol(),
     ['Row', (r) => r.row, 'em'],
-    ['Qty', (r) => num(r.quantity), 'num'],
+    // Two quantity columns on purpose: the systems disagree about how many
+    // tickets a listing holds, and one merged column would have to pick a side.
+    ['Lake qty', (r) => (r.market_only ? null : num(r.quantity)), 'num'],
+    ['B2B qty', (r) => {
+      const q = marketQty(r);
+      if (q === null || q === undefined) return null;
+      const lq = r.market_only ? null : Number(r.quantity);
+      return (lq !== null && Number(q) !== lq)
+        ? el('span', { className: 'flag', textContent: num(q) })
+        : num(q);
+    }, 'num'],
     // One listing, one row, every system's price for it side by side.
     ['B2B shows', (r) => money(b2bShows(r)), 'num'],
     ['B2B connector', (r) => money(marketPrice(r)), 'num'],
@@ -1130,7 +1171,7 @@ async function loadBoard(g, sec, ok, bag) {
     // fails the read (INCORRECT_DATA).
     ['Seats', (r) => {
       if (r.market_only) return r.seats;
-      const m = liveBy.get(key(r.row, r.quantity));
+      const m = matchOf.get(r);
       return m ? m.seats : null;
     }, 'id'],
     ['Updated', (r) => (r.updated_at || '').slice(0, 16), 'id'],
@@ -1144,7 +1185,8 @@ async function loadBoard(g, sec, ok, bag) {
     '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
     '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
     '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
-    'Every listing from any source appears, matched on row + quantity; <b>In</b> says which systems carry it, which is a different question from whether their prices agree. ' +
+    'Every listing from any source appears, matched on <b>row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
+    'That is why there are two quantity columns, with the B2B one flagged when it differs. <b>In</b> says which systems carry the listing, which is a different question from whether their prices or quantities agree. ' +
     'Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
 
   renderRecon(bag);
