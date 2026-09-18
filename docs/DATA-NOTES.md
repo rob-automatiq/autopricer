@@ -147,6 +147,76 @@ one seat:
 
 If a tool shows one of these without saying which, it is wrong by omission.
 
+## 11. Two ClickHouse faults that abort a query outright
+
+Both cost a shipped version of this tool. Neither is about your data being
+wrong; they are engine and ingest defects you have to write around.
+
+**`deleted_at IS NULL` fails** on ClickHouse 26.4.5 when the same block also
+carries an `IN (subquery)` set:
+
+```
+Code: 10. DB::Exception: Not found column deleted_at.null: in block
+in(__table6.event_id_with_pos, __set_...) ... (NOT_FOUND_COLUMN_IN_BLOCK)
+```
+
+It is the null-check, not the column. Select
+`ifNull(toString(l.deleted_at), '') AS deleted_at` and test it in the
+application instead.
+
+**Selecting `mcp_lysted_listings.seats` aborts the read.** The column is
+declared `Nullable(JSON)` but the parquet behind it holds arrays:
+
+```
+Code: 117. DB::Exception: Cannot insert data into JSON column: Cannot read
+JSON object from JSON element: [1,2,3,4,5,6,7,8,9,10] ... column: seats
+(in file/uri internal_mcp/mcp_lysted_listings/0011_part_00.parquet)
+(INCORRECT_DATA)
+```
+
+`toString()` does not help — the failure is in reading the part, so the whole
+query dies. Do not select the column. Seat numbers are available cleanly from
+`B2B MCP.search_listings` (`"5-10"`). Worth fixing at the ingest: the declared
+type and the stored data disagree. `mcp_lysted_listings.tags` is also
+`Nullable(JSON)` and presumably carries the same risk.
+
+## 12. Retail section labels are prefixed, and the obvious filter is inverted
+
+`mcp_prism_*_event_listings.section` stores the **prefixed** label
+(`Upper Level 209`), not the bare number. Normalise the column, do not build
+candidate labels:
+
+```sql
+AND replaceRegexpOne(
+      replaceRegexpOne(ifNull(p.section, ''),
+        '(?i)^(lower|upper|club|suite|main|balcony|mezzanine)[ ]+(level|lvl)[ ]+', ''),
+      '^0+', '') = '209'
+```
+
+Writing `'209' IN (p.section, ...)` asks whether the literal `'209'` equals
+`'Upper Level 209'`, which is always false — an empty panel that looks like
+"this section has no asks".
+
+## 13. `mcp_sales` and `mcp_lysted_sales` disagree on gross for the same sale
+
+Section 209, row Q, 2026-10-28, qty 2, invoiced 2026-09-16 — one sale, two
+tables:
+
+| table | gross total | gross / tkt | OST total |
+|---|---|---|---|
+| `mcp_sales` | 251.98 | $125.99 | 262.04 |
+| `mcp_lysted_sales` | 254.4998 | $127.25 | 262.04 |
+
+OST agrees to the cent; gross differs by **1%**. Both are loaded from the same
+trade, so at least one is derived rather than recorded. Show whichever you use
+with its table named, and do not average them.
+
+The full chain for that seat, which is the cleanest worked example in this data:
+**listed at $125.99** (`mcp_lysted_listings` 24487368) → **sold $125.99 gross /
+$131.02 OST** per `mcp_sales` → **$127.25 gross / $131.02 OST** per
+`mcp_lysted_sales`. The live board still shows a 10-seat row Q listing at
+$124.95, with Uptick's push price $124.95, comp $99.99, floor $119, ceiling $895.
+
 ## Result-size limit
 
 The Datalake MCP spills a large answer to a file and returns the path instead of

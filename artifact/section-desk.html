@@ -225,10 +225,20 @@
     background: var(--surface); padding: 1px 4px; border-radius: 3px;
     border: 1px solid var(--line);
   }
+  #mapnote { border-top: 1px solid var(--line); }
+  #mapnote .state { padding: 12px 14px; }
   .state { padding: 22px 14px; text-align: center; color: var(--ink-3); font-size: 13px; }
   .state.err { text-align: left; color: var(--ink); }
   .state.err h3 { margin: 0 0 6px; font-size: 13px; color: var(--bad); }
   .state.err p { margin: 0; font-size: 12.5px; color: var(--ink-2); max-width: 62ch; }
+  .state.err details { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+  .state.err summary { cursor: pointer; }
+  .state.err pre {
+    font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word; max-height: 190px;
+    overflow: auto; margin: 6px 0 0; padding: 8px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
+  }
   .skel {
     height: 11px; border-radius: 3px; margin: 9px 0;
     background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2));
@@ -275,6 +285,7 @@
           <span><i class="swatch" style="background:var(--surface-2)"></i>none</span>
           <span><i class="swatch" style="background:var(--pos)"></i>selected</span>
         </div>
+        <div id="mapnote" hidden></div>
       </section>
       <section class="card" id="oddcard" hidden>
         <header><h2>Sections off the map</h2><span class="sub">In the feed, not in the bowl layout</span></header>
@@ -427,8 +438,16 @@ function explain(e) {
       return { h: 'Needs per-call approval', p: 'Policy requires approval for each call to ' + srv + ', which artifacts cannot request yet.' };
     case 'server_unavailable':
       return { h: srv + ' did not answer', p: 'The upstream is briefly unreachable. Refresh in a moment.', retry: true };
-    case 'tool_error':
-      return { h: 'The query was rejected', p: (e && e.message) || 'The connector ran the call and reported a failure.' };
+    case 'tool_error': {
+      // ClickHouse exceptions arrive as a paragraph of block dumps. Lead with
+      // the part that names the problem and keep the rest available.
+      const full = (e && e.message) || 'The connector ran the call and reported a failure.';
+      const m = /DB::Exception:\s*([^:]*?(?:Not found column [^\s:]+|[^.]{0,140}))/.exec(full);
+      const code = /\(([A-Z_]{4,})\)/.exec(full);
+      let head = m ? m[1].trim().replace(/\s+/g, ' ') : full.slice(0, 160);
+      if (code) head += ' [' + code[1] + ']';
+      return { h: 'The query was rejected', p: head, detail: full !== head ? full : null };
+    }
     case 'not_granted': case 'capability_disabled': case 'capability_removed':
       return { h: 'Live data is not available in this view', p: 'This view cannot reach your connectors. Open the artifact from claude.ai to load live data.' };
     case 'cancelled':
@@ -497,8 +516,11 @@ SELECT 'b2b' AS src, ifNull(l.section, '') AS section, count() AS n,
 FROM mcp_lysted_listings l
 WHERE l.event_id_with_pos IN ${evScope(b2b)}
   AND l.status IN ('ACTIVE', 'READY')
-  AND l.deleted_at IS NULL
 GROUP BY section`;
+/* Note: no `deleted_at IS NULL` anywhere in this file. ClickHouse 26.4 fails a
+   null-check on a Nullable(DateTime64) when the same block carries an
+   IN(subquery) set -- NOT_FOUND_COLUMN_IN_BLOCK on `deleted_at.null`. The
+   column is selected as text instead and the check happens in the page. */
 
 const sqlSales = (b2b, sec) => `
 SELECT e.pos                                              AS pos,
@@ -539,9 +561,9 @@ SELECT l.id                          AS listing_id,
        l.stock_type                  AS stock_type,
        l.broadcast                   AS broadcast,
        l.auto_pricing_enabled        AS autopricing,
-       toString(l.seats)             AS seats,
        toString(l.updated_at)        AS updated_at,
        toString(l.processed_at)      AS processed_at,
+       ifNull(toString(l.deleted_at), '') AS deleted_at,
        u.push_price                  AS push_price,
        u.cmp                         AS cmp,
        u.floor                       AS floor_px,
@@ -552,7 +574,6 @@ FROM mcp_lysted_listings l
 LEFT JOIN mcp_uptick_pricing u ON u.listing_id = l.id
 WHERE l.event_id_with_pos IN ${evScope(b2b)}
   AND l.section = ${sqlStr(sec)}
-  AND l.deleted_at IS NULL
 ORDER BY l.price
 LIMIT 150`;
 
@@ -608,7 +629,10 @@ FROM mcp_prism_vividseats_event_listings p
 WHERE p.event_id = ${sqlStr(vsId)}
   AND p.processed_date = (SELECT d FROM latest)
   AND p.is_active
-  AND ${sqlStr(sec)} IN (p.section, p.section_name, concat('Lower Level ', ${sqlStr(sec)}), concat('Upper Level ', ${sqlStr(sec)}))
+  AND replaceRegexpOne(
+        replaceRegexpOne(ifNull(p.section, ''),
+          '(?i)^(lower|upper|club|suite|main|balcony|mezzanine)[ ]+(level|lvl)[ ]+', ''),
+        '^0+', '') = ${sqlStr(sec)}
 ORDER BY all_in_per_ticket
 LIMIT 150`;
 
@@ -629,6 +653,12 @@ function setState(hostId, kind, a, b) {
   } else if (kind === 'err') {
     const d = el('div', { className: 'state err' });
     d.append(el('h3', { textContent: a.h }), el('p', { textContent: a.p }));
+    if (a.detail) {
+      const det = el('details');
+      det.append(el('summary', { textContent: 'Full message' }),
+                 el('pre', { textContent: a.detail }));
+      d.append(det);
+    }
     host.append(d);
   }
 }
@@ -677,7 +707,9 @@ function table(hostId, rows, cols, note) {
 function drawMap() {
   const svg = $('#map');
   const c = VENUE.canvas;
-  svg.setAttribute('viewBox', '0 0 ' + c.w + ' ' + c.h);
+  // Corner tiles are rotated about their own centres, so their corners reach
+  // past the nominal canvas -- pad the viewBox or the outer ring clips.
+  svg.setAttribute('viewBox', '-2 -2 ' + (c.w + 4) + ' ' + (c.h + 4));
   svg.textContent = '';
   const ns = 'http://www.w3.org/2000/svg';
   const mk = (tag, attrs) => {
@@ -773,6 +805,7 @@ async function loadActivity() {
       map.set(k, cur);
     });
     state.activity = map;
+    $('#mapnote').hidden = true;
     const odd = [...map.keys()].filter((k) => !VENUE.tiles[k]).sort();
     const oddHost = $('#oddchips');
     oddHost.textContent = '';
@@ -796,9 +829,21 @@ async function loadActivity() {
     loadSection();
   } catch (e) {
     if (mine !== state.seq) return;
+    // The overview failing must not take the section panels with it: shading
+    // the map is a convenience, reading one section is the job.
     drawMap();
     const x = explain(e);
-    ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
+    $('#mapnote').hidden = false;
+    setState('#mapnote', 'err', Object.assign({}, x, { h: 'Section shading unavailable' }));
+    $('#mapsub').textContent = 'Type a section';
+    if (state.section) {
+      loadSection();
+    } else {
+      ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody']
+        .forEach((h) => setState(h, 'empty', 'Type a section number above to load it.'));
+      $('#recon').textContent = '';
+      $('#reconnote').textContent = '';
+    }
   }
 }
 
@@ -887,13 +932,17 @@ async function loadBoard(g, sec, ok, bag) {
   stamp($('#b2bstamp'), lakeRes);
   const liveHere = (live || []).filter((l) => secKey(l.section) === sec);
   bag.board = lake; bag.live = liveHere;
+  // A listing is on sale only if it is broadcastable AND not soft-deleted. The
+  // delete check is done here because ClickHouse cannot do it in the query.
+  const onSale = (r) => (r.status === 'ACTIVE' || r.status === 'READY')
+    && !String(r.deleted_at || '').trim();
 
   // The reconciliation: the same board reached two independent ways. Match on
   // row + quantity, which is what a human would eyeball.
   const key = (row, qty) => String(row || '').trim().toUpperCase() + '|' + qty;
   const liveBy = new Map();
   liveHere.forEach((l) => liveBy.set(key(l.row, l.quantity), l));
-  const activeLake = lake.filter((r) => r.status === 'ACTIVE' || r.status === 'READY');
+  const activeLake = lake.filter(onSale);
 
   $('#b2bsub').textContent = activeLake.length + ' live in the lake · ' +
     (liveErr ? 'marketplace unavailable' : liveHere.length + ' on the marketplace');
@@ -915,9 +964,11 @@ async function loadBoard(g, sec, ok, bag) {
     }, 'num'],
     ['Agree', (r) => {
       const m = liveBy.get(key(r.row, r.quantity));
-      const live = (r.status === 'ACTIVE' || r.status === 'READY');
       if (!m) {
-        if (!live) return el('span', { className: 'miss', textContent: 'n/a — ' + (r.status || '?').toLowerCase() });
+        if (String(r.deleted_at || '').trim()) {
+          return el('span', { className: 'miss', textContent: 'n/a — deleted' });
+        }
+        if (!onSale(r)) return el('span', { className: 'miss', textContent: 'n/a — ' + (r.status || '?').toLowerCase() });
         return el('span', { className: 'flag', textContent: 'not on marketplace' });
       }
       const d = Number(m.price) / 100 - Number(r.price);
@@ -925,12 +976,20 @@ async function loadBoard(g, sec, ok, bag) {
         ? el('span', { className: 'flag ok', textContent: 'match' })
         : el('span', { className: 'flag', textContent: (d > 0 ? '+' : '') + d.toFixed(2) });
     }, null],
-    ['Status', (r) => r.status, null],
+    ['Status', (r) => (String(r.deleted_at || '').trim()
+      ? el('span', { className: 'flag', textContent: 'deleted' })
+      : r.status), null],
     ['Broadcast', (r) => (r.broadcast === true ? 'yes' : r.broadcast === false ? 'no' : null), null],
     ['Autopricing', (r) => (r.autopricing === true ? 'on' : r.autopricing === false ? 'off' : null), null],
     ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
     ['Stock', (r) => (r.stock_type || '').toLowerCase().replace(/_/g, ' '), null],
-    ['Seats', (r) => (r.seats || '').replace(/[\[\]"]/g, ''), 'id'],
+    // Seats come from the marketplace, not the lake: mcp_lysted_listings.seats
+    // is a JSON column whose parquet holds arrays, and selecting it at all
+    // fails the read (INCORRECT_DATA).
+    ['Seats', (r) => {
+      const m = liveBy.get(key(r.row, r.quantity));
+      return m ? m.seats : null;
+    }, 'id'],
     ['Updated', (r) => (r.updated_at || '').slice(0, 16), 'id'],
     ['Listing id', (r) => r.listing_id, 'id'],
     ['Org', (r) => r.org_id, 'id'],
@@ -1054,9 +1113,11 @@ function renderRecon(bag) {
     add('Same sale, OST', 'var(--pos)', ost ? money(ost) : '—',
       ost ? 'What Uptick displays for this sale' : 'This POS never sent an OST figure');
   }
-  const live = (bag.live || []).map((l) => Number(l.price) / 100).filter(Number.isFinite);
-  const lakeLive = (bag.board || []).filter((r) => r.status === 'ACTIVE' || r.status === 'READY')
-    .map((r) => Number(r.price)).filter(Number.isFinite);
+  // A $0 listing is a data artifact, not the cheapest seat in the house.
+  const live = (bag.live || []).map((l) => Number(l.price) / 100).filter((n) => Number.isFinite(n) && n > 0);
+  const lakeLive = (bag.board || [])
+    .filter((r) => (r.status === 'ACTIVE' || r.status === 'READY') && !String(r.deleted_at || '').trim())
+    .map((r) => Number(r.price)).filter((n) => Number.isFinite(n) && n > 0);
   const b2bGetIn = live.length ? Math.min(...live) : (lakeLive.length ? Math.min(...lakeLive) : null);
   if (b2bGetIn !== null) {
     add('B2B get-in', 'var(--b2b)', money(b2bGetIn),
