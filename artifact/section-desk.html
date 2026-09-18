@@ -81,7 +81,9 @@
     font-family: var(--sans); font-size: 14px; line-height: 1.45;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 0 56px; }
+  /* Full width: this is a table-heavy tool and the columns are the content, so
+     a fixed measure just forces horizontal scrolling on a wide screen. */
+  .wrap { max-width: 2200px; margin: 0 auto; padding-inline: 20px; padding-block: 18px 56px; }
 
   /* ---------------------------------------------------------- toolbar */
   .top {
@@ -91,7 +93,7 @@
     border-bottom: 1px solid var(--line);
   }
   .top-in {
-    max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 12px;
+    max-width: 2200px; margin: 0 auto; padding-inline: 20px; padding-block: 12px;
     display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end;
   }
   .brand { margin-right: auto; min-width: 0; }
@@ -172,6 +174,24 @@
   }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .swatch { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--line-strong); }
+
+  .pair { display: flex; gap: 6px; align-items: stretch; }
+  .pair button { white-space: nowrap; font-size: 12px; }
+
+  /* Totals strip: one row per source, so "how many listings" is answered with
+     provenance instead of a single number that hides the disagreement. */
+  .totals { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .totals th, .totals td { padding: 7px 14px; text-align: right; white-space: nowrap; }
+  .totals th:first-child, .totals td:first-child { text-align: left; }
+  .totals thead th {
+    font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--ink-2); background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .totals tbody tr { border-bottom: 1px solid var(--line); }
+  .totals td:not(:first-child) { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .totals .who { color: var(--ink-2); }
+  .totals .who b { color: var(--ink); font-weight: 600; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip {
@@ -265,7 +285,10 @@
     </div>
     <div class="fld">
       <label for="sec">Section</label>
-      <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="all">
+      <div class="pair">
+        <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="all">
+        <button id="clearsec" type="button" hidden>All sections</button>
+      </div>
     </div>
     <div class="fld">
       <label for="refresh">&nbsp;</label>
@@ -323,6 +346,7 @@
           <span class="sub" id="b2bsub">Live marketplace vs. the lake&rsquo;s copy</span>
           <span class="stamp" id="b2bstamp"></span>
         </header>
+        <div id="b2btotals"></div>
         <div id="b2bbody"></div>
       </section>
 
@@ -747,6 +771,7 @@ function drawMap() {
 function pick(sec) {
   state.section = (sec && sec !== state.section) ? sec : null;
   $('#sec').value = state.section || '';
+  $('#clearsec').hidden = !state.section;
   drawMap();
   $('#mapsub').textContent = state.section
     ? 'Section ' + state.section + ' — click again for all'
@@ -856,6 +881,8 @@ function loadSection() {
   $('#recontitle').textContent = (sec ? 'Section ' + sec : 'Whole game')
     + ' · ' + (g.event_date || '');
   ['#salesbody', '#b2bbody', '#retailbody'].forEach((h) => setState(h, 'load'));
+  $('#b2btotals').textContent = '';
+  $('#clearsec').hidden = !sec;
   $('#recon').textContent = '';
   $('#reconnote').textContent = '';
 
@@ -1035,6 +1062,8 @@ async function loadBoard(g, sec, ok, bag) {
     + ' · ' + lake.length + ' lake rows incl. sold'
     + ' · ' + scopeLabel();
 
+  renderTotals(liveHere, activeLake, liveErr);
+
   if (!lake.length && !liveHere.length) {
     setState('#b2bbody', 'empty', 'No B2B inventory in ' + scopeLabel() + ' for this game.');
     setState('#upbody', 'empty', 'No listings to price in ' + scopeLabel() + '.');
@@ -1110,8 +1139,8 @@ async function loadBoard(g, sec, ok, bag) {
   ], (liveErr
       ? '<b>' + esc(explain(liveErr).h) + '.</b> ' + esc(explain(liveErr).p) + ' The lake column still reads live. '
       : '') +
-    '<b>One listing has three prices.</b> <b>B2B shows</b> is the figure on the B2B screen, derived as the connector price ÷ 1.03 — checked against two listings read off that screen and exact to the cent both times. ' +
-    '<b>Marketplace</b> is what the connector returns (cents, converted), which runs exactly 3% above the displayed figure. ' +
+    '<b>One listing, up to four prices.</b> <b>B2B shows</b> is the figure on the B2B screen, derived as the connector price ÷ 1.03 — checked against two listings read off that screen and exact to the cent both times. ' +
+    '<b>B2B connector</b> is what the API returns (cents, converted), which runs exactly 3% above the displayed figure. ' +
     '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
     '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
     '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
@@ -1119,6 +1148,85 @@ async function loadBoard(g, sec, ok, bag) {
     'Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
 
   renderRecon(bag);
+}
+
+/**
+ * The four figures B2B's event list reports -- listings, tickets, get-in, ATP --
+ * computed from each source that can answer them, one row each.
+ *
+ * They do not agree, and no single source reproduces B2B's own event-list row:
+ * the marketplace API returns the same set as B2B's listings page (112 of 112
+ * on the checked game) while that event row claims 157 listings, 606 tickets,
+ * a $72.90 get-in and a $291.21 ATP. So this shows provenance rather than
+ * picking a winner. Every listing the API returns carries `zone: false`, and
+ * mcp_sync_listings holds 101 zone rows for the same event with a $72.00
+ * get-in -- within 1.25% of B2B's figure -- which is the likeliest reason the
+ * event row counts more inventory and gets in cheaper than the API admits.
+ */
+function renderTotals(live, lakeOnSale, liveErr) {
+  const host = $('#b2btotals');
+  host.textContent = '';
+  const agg = (rows, price, qty) => {
+    const px = rows.map(price).filter((n) => Number.isFinite(n) && n > 0);
+    const tickets = rows.reduce((a, r) => a + (Number(qty(r)) || 0), 0);
+    const value = rows.reduce((a, r) => {
+      const p = Number(price(r)), q = Number(qty(r));
+      return a + (Number.isFinite(p) && p > 0 && Number.isFinite(q) ? p * q : 0);
+    }, 0);
+    return {
+      listings: rows.length,
+      tickets: tickets,
+      getIn: px.length ? Math.min.apply(null, px) : null,
+      atp: tickets ? value / tickets : null,
+    };
+  };
+
+  const rows = [];
+  if (!liveErr) {
+    const c = agg(live, (l) => Number(l.price) / 100, (l) => l.quantity);
+    rows.push({ who: '<b>B2B marketplace</b> · what the API returns', m: c });
+    rows.push({
+      who: '<b>B2B as displayed</b> · the same set ÷ 1.03',
+      m: {
+        listings: c.listings, tickets: c.tickets,
+        getIn: c.getIn === null ? null : c.getIn / 1.03,
+        atp: c.atp === null ? null : c.atp / 1.03,
+      },
+    });
+  }
+  rows.push({
+    who: '<b>Lake</b> · <code>mcp_lysted_listings</code>, on sale',
+    m: agg(lakeOnSale, (r) => Number(r.price), (r) => r.quantity),
+  });
+
+  const t = el('table', { className: 'totals' });
+  const thead = el('thead');
+  thead.innerHTML = '<tr><th>Source</th><th>Listings</th><th>Tickets</th>'
+    + '<th>Get-in</th><th>ATP</th></tr>';
+  const tb = el('tbody');
+  rows.forEach((r) => {
+    const tr = el('tr');
+    tr.append(el('td', { className: 'who', innerHTML: r.who }));
+    tr.append(el('td', { textContent: num(r.m.listings) }));
+    tr.append(el('td', { textContent: num(r.m.tickets) }));
+    tr.append(el('td', { textContent: money(r.m.getIn) || '—' }));
+    tr.append(el('td', { textContent: money(r.m.atp) || '—' }));
+    tb.append(tr);
+  });
+  t.append(thead, tb);
+  host.append(t);
+  host.append(el('p', {
+    className: 'note',
+    innerHTML: '<b>ATP</b> here is ticket-weighted (total value ÷ tickets), which is what an '
+      + 'average ticket price means; the plain mean of listing prices is a different and usually '
+      + 'higher number. These rows <b>do not agree with each other</b>, and none of them reproduces '
+      + 'B2B’s own event list — for 2026-10-28 that row reads <b>157 listings, 606 tickets, '
+      + '$72.90 get-in, $291.21 ATP</b>, while B2B’s listings page and its API both return '
+      + '<b>112</b>. Every listing the API returns is <code>zone: false</code>, and '
+      + '<code>mcp_sync_listings</code> holds <b>101 zone rows</b> for this event with a <b>$72.00</b> '
+      + 'get-in, so the event row is almost certainly counting zone inventory the API withholds. That '
+      + 'gap is inside B2B, not something this page can close.',
+  }));
 }
 
 async function loadRetail(g, sec, ok, bag) {
@@ -1182,9 +1290,13 @@ function renderRecon(bag) {
     .map((r) => Number(r.price)).filter((n) => Number.isFinite(n) && n > 0);
   const b2bGetIn = live.length ? Math.min(...live) : (lakeLive.length ? Math.min(...lakeLive) : null);
   if (b2bGetIn !== null) {
-    add('B2B get-in', 'var(--b2b)', money(b2bGetIn),
-      (live.length ? live.length : lakeLive.length) + ' consignment listings · median ' +
-      (money(median(live.length ? live : lakeLive)) || '—'));
+    // Shown as B2B displays it, matching the Listings table's leading column,
+    // so the two numbers on this page cannot contradict each other.
+    const fromApi = live.length > 0;
+    add('B2B get-in', 'var(--b2b)', money(fromApi ? b2bGetIn / 1.03 : b2bGetIn),
+      (fromApi ? live.length + ' listings from the B2B API, as displayed'
+               : lakeLive.length + ' on sale in the lake') + ' · median ' +
+      (money(fromApi ? median(live) / 1.03 : median(lakeLive)) || '—'));
   }
   const retail = (bag.retail || []).map((r) => Number(r.all_in_per_ticket)).filter(Number.isFinite);
   if (retail.length) {
@@ -1239,6 +1351,7 @@ function bindUI() {
   };
   secIn.addEventListener('change', commit);
   secIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
+  $('#clearsec').addEventListener('click', () => { secIn.value = ''; commit(); });
   $('#refresh').addEventListener('click', async () => {
     const b = $('#refresh');
     b.disabled = true; b.textContent = 'Refreshing…';

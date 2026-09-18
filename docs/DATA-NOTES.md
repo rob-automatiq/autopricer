@@ -283,10 +283,46 @@ The lake price is the broker's own list price, and it equals
 which is the useful thing about it, and a reason to keep it on screen rather
 than hide it behind the marketplace figure.
 
-**Counts disagree too.** The B2B screen reports **112 listings** for that game;
-`mcp_lysted_listings` holds **106** (98 `ACTIVE`/`READY`, 8 `SOLD`, 0 deleted)
-across 46 sections; `search_listings` returns about 110. Show all three counts
-rather than picking one.
+## 15. B2B's event list disagrees with B2B's own listing view
+
+For 2026-10-28, B2B's event-list row reports **157 listings, 606 tickets,
+$72.90 get-in, $291.21 ATP**. No source reproduces that, including B2B itself:
+
+| source | listings | tickets | get-in | ATP (ticket-weighted) |
+|---|---|---|---|---|
+| **B2B event list** | **157** | **606** | **$72.90** | **$291.21** |
+| B2B listings page | 112 | — | — | — |
+| `search_listings` (the API) | 112 | — | $89.35 | — |
+| `mcp_sync_listings`, broadcast to B2B | 136 | 596 | $72.00 | $500.02 |
+| `mcp_sync_listings`, all | 148 | 639 | $72.00 | $482.39 |
+| `mcp_sync_listings`, zone rows only | 101 | 470 | $72.00 | $557.29 |
+| `mcp_sync_listings`, seated only | 47 | 169 | $85.04 | $274.08 |
+| `mcp_lysted_listings`, all | 106 | 687 | $85.87 | $177.57 |
+| `mcp_lysted_listings`, on sale | 98 | 666 | $85.87 | $173.74 |
+
+The API and the listings page agree with each other (112) and disagree with the
+event row, so the gap is **inside B2B**, not in the lake or in how it is
+queried.
+
+The likely cause is **zone listings**. Every row `search_listings` returns
+carries `zone: false`, while `mcp_sync_listings` holds **101 zone rows** for
+this event whose get-in is **$72.00** — within 1.25% of the event row's $72.90,
+and cheap zone inventory is exactly what would pull a get-in down while the API
+withholds it. Worth confirming with whoever owns that aggregate.
+
+Two things to get right when computing these yourself:
+
+- **ATP is ticket-weighted**: `sum(price * quantity) / sum(quantity)`. The plain
+  mean of listing prices is a different and usually higher number
+  ($237.83 vs $177.57 on the Lysted rows), so quoting the wrong one looks like
+  a data problem when it is an arithmetic choice.
+- **Exclude zero prices from a get-in.** `mcp_lysted_listings` carries
+  `price = 0` rows; `min(price)` over them returns $0.00 and reads as the
+  cheapest seat in the arena.
+
+`mcp_sync_listing_broadcasts` is how you tell what went to B2B: it carries
+`b2b_count` per `(company_id, exchange_pos_id)`, joinable to
+`mcp_sync_listings.exchange_pos_id`.
 
 ## Result-size limit
 
