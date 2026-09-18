@@ -197,6 +197,25 @@ Writing `'209' IN (p.section, ...)` asks whether the literal `'209'` equals
 `'Upper Level 209'`, which is always false — an empty panel that looks like
 "this section has no asks".
 
+## 13a. The POS and B2B views of a sale join exactly
+
+**`mcp_sales.id` = `mcp_lysted_sales.user_invoice_id`.** No section/row/date
+matching needed. Scope the B2B side to the game as well, and left-join from
+`mcp_sales`:
+
+```sql
+LEFT JOIN (
+  SELECT user_invoice_id, sale_id, invoice_line_id, externalref,
+         total_sales, total_sales_ost, saletotal, commission_rate
+  FROM mcp_lysted_sales
+  WHERE event_id_with_pos IN (<the game's event ids>)
+) ls ON ls.user_invoice_id = s.id
+```
+
+On the 2026-10-28 game: **53 POS sales, 8 of them also in B2B, and all 8 B2B
+sales match a POS sale** — so B2B is a subset and a left join loses nothing.
+Every matched row is `pos = 'in'`, which is what you would expect.
+
 ## 13. `mcp_sales` and `mcp_lysted_sales` disagree on gross for the same sale
 
 Section 209, row Q, 2026-10-28, qty 2, invoiced 2026-09-16 — one sale, two
@@ -210,6 +229,24 @@ tables:
 OST agrees to the cent; gross differs by **1%**. Both are loaded from the same
 trade, so at least one is derived rather than recorded. Show whichever you use
 with its table named, and do not average them.
+
+Across all 8 matched sales on that game, **OST agrees on every one and gross
+differs on 4** — three by exactly +1.0% on the B2B side and one by +1.5%:
+
+| section/row | POS gross / tkt | B2B gross / tkt | OST / tkt | commission |
+|---|---|---|---|---|
+| 138 K | $265.00 | $267.65 (+1.0%) | $275.59 | 4% |
+| 209 Q | $125.99 | $127.25 (+1.0%) | $131.02 | 4% |
+| 131 V | $603.75 | $609.79 (+1.0%) | $627.88 | 4% |
+| 231 J | $200.00 | $203.00 (+1.5%) | $196.00 | 8% |
+| 228 V | $90.12 | $90.12 | $93.73 | 4% |
+| 111 G | $600.00 | $600.00 | $587.99 | 6% |
+| 206 K | $172.91 | $172.91 | $169.45 | 8% |
+| 136 R | $265.00 | $265.00 | $259.70 | 6% |
+
+Note also that OST sits **above** gross on some rows and **below** on others
+(231 J, 111 G, 206 K, 136 R), so the relationship is not even directional. The
+lake's documented `total_sales >= total_sales_ost` fails in both directions.
 
 The full chain for that seat, which is the cleanest worked example in this data:
 **listed at $125.99** (`mcp_lysted_listings` 24487368) → **sold $125.99 gross /

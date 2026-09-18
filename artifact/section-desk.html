@@ -308,7 +308,7 @@
 
       <section class="card src-pos" id="salescard">
         <header>
-          <span class="tag pos">Uptick / POS</span>
+          <span class="tag pos">Sold</span>
           <h2>Sales</h2>
           <span class="sub" id="salessub"></span>
           <span class="stamp" id="salesstamp"></span>
@@ -326,31 +326,11 @@
         <div id="b2bbody"></div>
       </section>
 
-      <section class="card src-b2b" id="b2bsoldcard">
-        <header>
-          <span class="tag b2b">B2B</span>
-          <h2>Sold</h2>
-          <span class="sub" id="b2bsoldsub"></span>
-          <span class="stamp" id="b2bsoldstamp"></span>
-        </header>
-        <div id="b2bsoldbody"></div>
-      </section>
-
-      <section class="card src-pos" id="upcard">
-        <header>
-          <span class="tag pos">Uptick</span>
-          <h2>Autopricer state</h2>
-          <span class="sub" id="upsub">Push price, comp, floor and ceiling per listing</span>
-          <span class="stamp" id="upstamp"></span>
-        </header>
-        <div id="upbody"></div>
-      </section>
-
       <section class="card src-retail" id="retailcard">
         <header>
           <span class="tag retail">Retail</span>
-          <h2>VividSeats board</h2>
-          <span class="sub" id="retailsub">The public ask board, for context</span>
+          <h2>Public market</h2>
+          <span class="sub" id="retailsub">Everyone&rsquo;s VividSeats asks, not your inventory</span>
           <span class="stamp" id="retailstamp"></span>
         </header>
         <div id="retailbody"></div>
@@ -530,28 +510,51 @@ GROUP BY section`;
    put a game's whole board out of reach. */
 const secClause = (col, sec) => (sec ? `\n  AND ${col} = ${sqlStr(sec)}` : '');
 
+/* One row per SALE, with each system's view of it side by side.
+   mcp_sales.id IS mcp_lysted_sales.user_invoice_id -- an exact join, not a
+   section/row/date guess. On one game: 53 POS sales, 8 of them also in B2B,
+   all 8 matching, OST identical on every one and gross differing on 4. */
 const sqlSales = (b2b, sec) => `
-SELECT e.pos                                              AS pos,
-       e.id                                               AS event_row,
-       s.id                                               AS sale_id,
-       s.account_id                                       AS account_id,
-       s.ms_company_name                                   AS marketplace,
-       s.type                                             AS sale_type,
-       s.processor                                        AS processor,
-       s.if_brokergenius                                  AS priced_by_uptick,
-       s.section                                          AS section,
-       s.row                                              AS row,
-       s.total_qty                                        AS qty,
-       s.total_sales                                      AS gross_total,
-       s.total_sales_ost                                  AS ost_total,
-       s.total_cost                                       AS cost_total,
-       toString(s.invoice_date)                           AS invoice_date,
-       toString(s.invoice_date_time_utc)                  AS invoice_utc,
-       s.tags                                             AS tags,
-       s.anchor                                           AS anchor,
-       s.last_touched_email                               AS last_touched
+SELECT e.pos                                   AS pos,
+       e.id                                    AS event_row,
+       s.id                                    AS sale_id,
+       s.account_id                            AS account_id,
+       s.ms_company_name                        AS marketplace,
+       s.type                                  AS sale_type,
+       s.processor                             AS processor,
+       s.if_brokergenius                       AS priced_by_uptick,
+       s.section                               AS section,
+       s.row                                   AS row,
+       s.total_qty                             AS qty,
+       s.total_sales                           AS pos_gross,
+       s.total_sales_ost                       AS pos_ost,
+       s.total_cost                            AS cost_total,
+       toString(s.invoice_date)                AS invoice_date,
+       toString(s.invoice_date_time_utc)       AS invoice_utc,
+       s.tags                                  AS tags,
+       s.anchor                                AS anchor,
+       s.last_touched_email                    AS last_touched,
+       ls.sale_id                              AS b2b_sale_id,
+       ls.invoice_line_id                      AS b2b_line_id,
+       ls.listing_id                           AS b2b_listing_id,
+       ls.externalref                          AS b2b_ref,
+       ls.total_sales                          AS b2b_gross,
+       ls.total_sales_ost                      AS b2b_ost,
+       ls.saletotal                            AS b2b_saletotal,
+       ls.commission_rate                      AS commission_rate,
+       ls.revenue                              AS b2b_revenue,
+       ls.organization_name                    AS b2b_org,
+       ls.fulfillmentstatus                    AS b2b_fulfilment,
+       ls.consigned                            AS b2b_consigned
 FROM mcp_sales s
 INNER JOIN mcp_events e ON s.event_id = e.id
+LEFT JOIN (
+  SELECT user_invoice_id, sale_id, invoice_line_id, listing_id, externalref,
+         total_sales, total_sales_ost, saletotal, commission_rate, revenue,
+         organization_name, fulfillmentstatus, consigned
+  FROM mcp_lysted_sales
+  WHERE event_id_with_pos IN ${evScope(b2b)}
+) ls ON ls.user_invoice_id = s.id
 WHERE e.b2bexchangeeventid = ${sqlStr(b2b)}${secClause('s.section', sec)}
 ORDER BY s.invoice_date_time_utc DESC
 LIMIT 400`;
@@ -583,31 +586,6 @@ WHERE l.event_id_with_pos IN ${evScope(b2b)}${secClause('l.section', sec)}
 ORDER BY l.section, l.price
 LIMIT 400`;
 
-const sqlB2bSold = (b2b, sec) => `
-SELECT ls.sale_id                       AS sale_id,
-       ls.user_invoice_id               AS invoice_id,
-       ls.invoice_line_id               AS line_id,
-       ls.listing_id                    AS listing_id,
-       ls.externalref                   AS marketplace_ref,
-       ls.section                       AS section,
-       ls.row                           AS row,
-       ls.total_qty                     AS qty,
-       ls.total_sales                   AS gross_total,
-       ls.total_sales_ost               AS ost_total,
-       ls.saletotal                     AS sale_total,
-       ls.revenue                       AS revenue,
-       ls.revenue_ost                   AS revenue_ost,
-       ls.commission_rate               AS commission_rate,
-       ls.consigned                     AS consigned,
-       ls.organization_name             AS organization,
-       ls.parent_name                   AS parent,
-       ls.ms_company_name               AS marketplace,
-       ls.fulfillmentstatus             AS fulfillment,
-       toString(ls.invoice_date)        AS invoice_date
-FROM mcp_lysted_sales ls
-WHERE ls.event_id_with_pos IN ${evScope(b2b)}${secClause('ls.section', sec)}
-ORDER BY ls.invoice_date DESC
-LIMIT 400`;
 
 /* Retail board. Every numeric column in the prism tables is a String, and the
    table keeps one snapshot per processed_date, so the newest partition is the
@@ -794,7 +772,7 @@ async function loadGames() {
     await setGame(next.b2b_id);
   } catch (e) {
     const x = explain(e);
-    ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
+    ['#salesbody', '#b2bbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
     $('#recon').textContent = '';
     $('#reconnote').innerHTML = '<b>' + esc(x.h) + '.</b> ' + esc(x.p);
   }
@@ -858,7 +836,7 @@ async function loadActivity() {
     if (state.section) {
       loadSection();
     } else {
-      ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody']
+      ['#salesbody', '#b2bbody', '#retailbody']
         .forEach((h) => setState(h, 'empty', 'Type a section number above to load it.'));
       $('#recon').textContent = '';
       $('#reconnote').textContent = '';
@@ -877,7 +855,7 @@ function loadSection() {
   const ok = () => mine === state.seq;
   $('#recontitle').textContent = (sec ? 'Section ' + sec : 'Whole game')
     + ' · ' + (g.event_date || '');
-  ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'load'));
+  ['#salesbody', '#b2bbody', '#retailbody'].forEach((h) => setState(h, 'load'));
   $('#recon').textContent = '';
   $('#reconnote').textContent = '';
 
@@ -885,7 +863,6 @@ function loadSection() {
 
   loadSales(g, sec, ok, bag);
   loadBoard(g, sec, ok, bag);
-  loadSold(g, sec, ok, bag);
   loadRetail(g, sec, ok, bag);
 }
 
@@ -908,27 +885,54 @@ async function loadSales(g, sec, ok, bag) {
       renderRecon(bag);
       return;
     }
+    const inB2b = (r) => r.b2b_sale_id !== null && r.b2b_sale_id !== undefined;
     table('#salesbody', rows, [
       ['Invoiced', (r) => (r.invoice_utc || '').slice(0, 16).replace('T', ' '), 'id'],
       ...secCol(),
-      ['POS', (r) => r.pos, null],
       ['Row', (r) => r.row, 'em'],
       ['Qty', (r) => num(r.qty), 'num'],
-      ['Gross / tkt', (r) => money(per(r.gross_total, r.qty)), 'num'],
-      ['OST / tkt (Uptick)', (r) => money(per(zeroIsUnknown(r.ost_total), r.qty)), 'num'],
+      // One sale, one row, every system's price for it side by side.
+      ['POS gross / tkt', (r) => money(per(r.pos_gross, r.qty)), 'num'],
+      ['POS OST / tkt', (r) => money(per(zeroIsUnknown(r.pos_ost), r.qty)), 'num'],
+      ['B2B gross / tkt', (r) => money(per(r.b2b_gross, r.qty)), 'num'],
+      ['B2B OST / tkt', (r) => money(per(zeroIsUnknown(r.b2b_ost), r.qty)), 'num'],
+      ['In', (r) => (inB2b(r)
+        ? el('span', {
+            className: Math.abs(Number(r.pos_gross) - Number(r.b2b_gross)) > 0.01 ? 'flag' : 'flag ok',
+            textContent: Math.abs(Number(r.pos_gross) - Number(r.b2b_gross)) > 0.01
+              ? 'POS + B2B, gross differs' : 'POS + B2B',
+          })
+        : el('span', { className: 'miss', textContent: 'POS only' })), null],
       ['Cost / tkt', (r) => money(per(zeroIsUnknown(r.cost_total), r.qty)), 'num'],
-      ['Gross total', (r) => money(r.gross_total), 'num'],
-      ['OST total', (r) => money(zeroIsUnknown(r.ost_total)), 'num'],
+      ['POS gross total', (r) => money(r.pos_gross), 'num'],
+      ['POS OST total', (r) => money(zeroIsUnknown(r.pos_ost)), 'num'],
+      ['B2B gross total', (r) => money(r.b2b_gross), 'num'],
+      ['B2B sale total', (r) => money(zeroIsUnknown(r.b2b_saletotal)), 'num'],
+      ['Commission', (r) => (r.commission_rate === null || r.commission_rate === undefined
+        ? null : (Number(r.commission_rate) * 100).toFixed(1) + '%'), 'num'],
+      ['B2B revenue', (r) => money(r.b2b_revenue), 'num'],
       ['Marketplace', (r) => r.marketplace, null],
       ['Type', (r) => r.sale_type, null],
       ['Uptick-priced', (r) => (r.priced_by_uptick === true ? 'yes' : r.priced_by_uptick === false ? 'no' : null), null],
+      ['Fulfilment', (r) => r.b2b_fulfilment, null],
+      ['Organization', (r) => r.b2b_org, null],
+      ['Consigned', (r) => (r.b2b_consigned === true ? 'yes' : r.b2b_consigned === false ? 'no' : null), null],
+      ['POS', (r) => r.pos, null],
       ['Account', (r) => r.account_id, 'id'],
       ['Processor', (r) => r.processor, null],
       ['Tags', (r) => r.tags, null],
       ['Anchor', (r) => r.anchor, null],
       ['Event row', (r) => r.event_row, 'id'],
-      ['Sale id', (r) => r.sale_id, 'id'],
-    ], 'To find one of these in <b>Uptick</b>: <code>mcp_sales.id</code> is an internal hash, not an invoice number, so match on <b>account + event row + section/row + invoiced timestamp + marketplace + qty</b>. <b>OST</b> (<code>total_sales_ost</code>) is the figure Uptick displays; <b>gross</b> (<code>total_sales</code>) is what the buyer paid including exchange fees. A dash means the system never sent that figure — it is not a zero.');
+      ['POS sale id', (r) => r.sale_id, 'id'],
+      ['B2B sale id', (r) => r.b2b_sale_id, 'id'],
+      ['B2B line id', (r) => r.b2b_line_id, 'id'],
+      ['B2B listing id', (r) => r.b2b_listing_id, 'id'],
+      ['Marketplace ref', (r) => r.b2b_ref, 'id'],
+    ], '<b>One sale, up to four prices.</b> The POS pair comes from <code>mcp_sales</code> and the B2B pair from <code>mcp_lysted_sales</code>, joined exactly on <code>mcp_sales.id = mcp_lysted_sales.user_invoice_id</code> — not a section/row/date guess. ' +
+      '<b>OST</b> is the broker’s side of the trade and the figure <b>Uptick displays</b>; <b>gross</b> is what the buyer paid including exchange fees. ' +
+      'The two OST figures agree; <b>the two gross figures often do not</b> — on one game, 4 of the 8 matched sales differed by about 1%, so at least one is derived rather than recorded. The <b>In</b> column flags it per row. ' +
+      'To look a sale up: in <b>B2B</b>, search the <b>marketplace ref</b> or the numeric <b>B2B sale id</b> / <b>line id</b>. In <b>Uptick</b> there is no invoice number — <code>mcp_sales.id</code> is an internal hash — so match on <b>account + event row + section/row + invoiced timestamp + marketplace + qty</b>. ' +
+      'A dash means that system never sent the figure; it is not a zero.');
     renderRecon(bag);
   } catch (e) {
     if (!ok()) return;
@@ -1042,28 +1046,46 @@ async function loadBoard(g, sec, ok, bag) {
     ...secCol(),
     ['Row', (r) => r.row, 'em'],
     ['Qty', (r) => num(r.quantity), 'num'],
+    // One listing, one row, every system's price for it side by side.
     ['B2B shows', (r) => money(b2bShows(r)), 'num'],
-    ['Marketplace', (r) => money(marketPrice(r)), 'num'],
-    ['Lake list price', (r) => money(r.price), 'num'],
+    ['B2B connector', (r) => money(marketPrice(r)), 'num'],
+    ['Lake list', (r) => money(r.price), 'num'],
+    ['Uptick push', (r) => money(r.push_price), 'num'],
     // Presence, not price. The marketplace figure sits above the lake's list
     // price by a per-listing markup, so a price-equality test would flag every
     // healthy row as a mismatch. The markup itself gets its own column.
-    ['Seen in', (r) => {
-      if (r.market_only) return el('span', { className: 'flag', textContent: 'not in lake' });
-      if (marketPrice(r) !== null) return el('span', { className: 'flag ok', textContent: 'both' });
-      if (String(r.deleted_at || '').trim()) {
-        return el('span', { className: 'miss', textContent: 'lake only — deleted' });
+    // Which systems carry this listing at all, which is a different question
+    // from whether their prices match.
+    ['In', (r) => {
+      const where = [];
+      if (marketPrice(r) !== null) where.push('B2B');
+      if (!r.market_only) where.push('lake');
+      if (r.push_price !== null && r.push_price !== undefined) where.push('Uptick');
+      const txt = where.join(' + ') || '—';
+      if (r.market_only) return el('span', { className: 'flag', textContent: txt + ', not in lake' });
+      if (marketPrice(r) === null) {
+        const why = String(r.deleted_at || '').trim() ? 'deleted'
+          : (!onSale(r) ? (r.status || '?').toLowerCase() : null);
+        return why
+          ? el('span', { className: 'miss', textContent: txt + ' — ' + why })
+          : el('span', { className: 'flag', textContent: txt + ', not on B2B' });
       }
-      if (!onSale(r)) {
-        return el('span', { className: 'miss', textContent: 'lake only — ' + (r.status || '?').toLowerCase() });
-      }
-      return el('span', { className: 'flag', textContent: 'not on marketplace' });
+      return el('span', { className: 'flag ok', textContent: txt });
     }, null],
     ['Markup', (r) => {
       const shown = b2bShows(r), list = Number(r.price);
       if (shown === null || !Number.isFinite(list) || list <= 0) return null;
       return '+' + ((shown / list - 1) * 100).toFixed(1) + '%';
     }, 'num'],
+    ['Comp (cmp)', (r) => money(r.cmp), 'num'],
+    ['Floor', (r) => money(r.floor_px), 'num'],
+    ['Ceiling', (r) => money(r.ceiling_px), 'num'],
+    ['At floor', (r) => (r.push_price !== null && r.push_price !== undefined
+      && Number(r.floor_px) > 0 && Number(r.push_price) <= Number(r.floor_px) + 0.005
+      ? el('span', { className: 'flag', textContent: 'yes' })
+      : (r.push_price === null || r.push_price === undefined ? null : 'no')), null],
+    ['Mode', (r) => r.group_mode, null],
+    ['Priced at', (r) => (r.priced_at || '').slice(0, 16), 'id'],
     ['Status', (r) => {
       if (r.market_only) return el('span', { className: 'flag', textContent: 'marketplace only' });
       return String(r.deleted_at || '').trim()
@@ -1092,78 +1114,11 @@ async function loadBoard(g, sec, ok, bag) {
     '<b>Marketplace</b> is what the connector returns (cents, converted), which runs exactly 3% above the displayed figure. ' +
     '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
     '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
-    'Every row from either source appears, matched on row + quantity: <b>not in lake</b> means the marketplace is showing something the lake has not caught up on, <b>not on marketplace</b> is the reverse. ' +
+    '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
+    'Every listing from any source appears, matched on row + quantity; <b>In</b> says which systems carry it, which is a different question from whether their prices agree. ' +
     'Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
 
-  const priced = lake.filter((r) => r.push_price !== null && r.push_price !== undefined);
-  $('#upsub').textContent = priced.length + ' of ' + lake.length
-    + ' listings carry Uptick pricing · ' + scopeLabel();
-  if (!priced.length) {
-    setState('#upbody', 'empty',
-      'No listings in ' + scopeLabel() + ' are priced by Uptick.');
-  } else {
-    table('#upbody', priced, [
-      ...secCol(),
-      ['Row', (r) => r.row, 'em'],
-      ['Qty', (r) => num(r.quantity), 'num'],
-      ['Listed at', (r) => money(r.price), 'num'],
-      ['Push price', (r) => money(r.push_price), 'num'],
-      ['Comp (cmp)', (r) => money(r.cmp), 'num'],
-      ['Floor', (r) => money(r.floor_px), 'num'],
-      ['Ceiling', (r) => money(r.ceiling_px), 'num'],
-      ['At floor', (r) => (Number(r.push_price) <= Number(r.floor_px) + .005
-        ? el('span', { className: 'flag', textContent: 'yes' }) : 'no'), null],
-      ['Mode', (r) => r.group_mode, null],
-      ['Calculated', (r) => (r.priced_at || '').slice(0, 16), 'id'],
-      ['Listing id', (r) => r.listing_id, 'id'],
-    ], '<code>mcp_uptick_pricing</code> is a <b>daily snapshot</b>, not a live feed — every row in the table carries the same <code>calculated_at</code>. So <b>push price</b> is what Uptick last decided, and <b>listed at</b> is what the marketplace shows now; they diverge whenever a listing changed after the snapshot. Joined on <code>uptick_pricing.listing_id = lysted_listings.id</code>.');
-  }
   renderRecon(bag);
-}
-
-async function loadSold(g, sec, ok, bag) {
-  try {
-    const { rows, res } = await query(sqlB2bSold(g.b2b_id, sec), 'Consignment sales for one section, with invoice identifiers and both sale totals, for spot-checking against the B2B system.');
-    if (!ok()) return;
-    stamp($('#b2bsoldstamp'), res);
-    bag.sold = rows;
-    $('#b2bsoldsub').textContent = rows.length
-      ? rows.length + ' B2B sales · ' + scopeLabel() : '';
-    if (!rows.length) {
-      setState('#b2bsoldbody', 'empty', 'No B2B sales in ' + scopeLabel() + ' for this game.');
-      renderRecon(bag);
-      return;
-    }
-    table('#b2bsoldbody', rows, [
-      ['Invoiced', (r) => r.invoice_date, 'id'],
-      ...secCol(),
-      ['Row', (r) => r.row, 'em'],
-      ['Qty', (r) => num(r.qty), 'num'],
-      ['Gross / tkt', (r) => money(per(r.gross_total, r.qty)), 'num'],
-      ['OST / tkt', (r) => money(per(zeroIsUnknown(r.ost_total), r.qty)), 'num'],
-      ['Gross total', (r) => money(r.gross_total), 'num'],
-      ['OST total', (r) => money(zeroIsUnknown(r.ost_total)), 'num'],
-      ['Sale total', (r) => money(zeroIsUnknown(r.sale_total)), 'num'],
-      ['Commission', (r) => (r.commission_rate === null || r.commission_rate === undefined
-        ? null : (Number(r.commission_rate) * 100).toFixed(1) + '%'), 'num'],
-      ['Revenue', (r) => money(r.revenue), 'num'],
-      ['Revenue OST', (r) => money(r.revenue_ost), 'num'],
-      ['Marketplace', (r) => r.marketplace, null],
-      ['Fulfilment', (r) => r.fulfillment, null],
-      ['Consigned', (r) => (r.consigned === true ? 'yes' : r.consigned === false ? 'no' : null), null],
-      ['Organization', (r) => r.organization, null],
-      ['Parent', (r) => r.parent, null],
-      ['Marketplace ref', (r) => r.marketplace_ref, 'id'],
-      ['Sale id', (r) => r.sale_id, 'id'],
-      ['Line id', (r) => r.line_id, 'id'],
-      ['Listing id', (r) => r.listing_id, 'id'],
-      ['Invoice id', (r) => r.invoice_id, 'id'],
-    ], 'To find one of these in <b>B2B</b>: search the <b>marketplace ref</b> (<code>externalref</code>) or the numeric <b>sale id</b> / <b>line id</b>. <code>user_invoice_id</code> is a hash, so it is here for completeness rather than for typing. <b>Sale total</b> and <b>OST total</b> are the same figure in this table; <b>revenue</b> is commission × gross, which is why the two revenue columns differ by the same few per cent as the two totals.');
-    renderRecon(bag);
-  } catch (e) {
-    if (!ok()) return;
-    setState('#b2bsoldbody', 'err', explain(e));
-  }
 }
 
 async function loadRetail(g, sec, ok, bag) {
@@ -1211,9 +1166,9 @@ function renderRecon(bag) {
   const sales = bag.sales || [];
   const last = sales[0];
   if (last) {
-    add('Last sale, gross', 'var(--pos)', money(per(last.gross_total, last.qty)),
+    add('Last sale, gross', 'var(--pos)', money(per(last.pos_gross, last.qty)),
       'Row ' + (last.row || '?') + ' ×' + last.qty + ' · ' + (last.invoice_date || '') + ' · buyer paid, incl. fees');
-    const ost = per(zeroIsUnknown(last.ost_total), last.qty);
+    const ost = per(zeroIsUnknown(last.pos_ost), last.qty);
     add('Same sale, OST', 'var(--pos)', ost ? money(ost) : '—',
       ost ? 'What Uptick displays for this sale' : 'This POS never sent an OST figure');
   }
@@ -1294,7 +1249,7 @@ function bindUI() {
 async function boot() {
   bindUI();
   drawMap();
-  ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'load'));
+  ['#salesbody', '#b2bbody', '#retailbody'].forEach((h) => setState(h, 'load'));
   $('#reconnote').textContent = 'Reading the data lake…';
 
   let mcp = null;
@@ -1302,7 +1257,7 @@ async function boot() {
   state.mcp = mcp;
   if (!mcp) {
     const x = explain({ code: 'not_granted' });
-    ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
+    ['#salesbody', '#b2bbody', '#retailbody'].forEach((h) => setState(h, 'err', x));
     $('#recon').textContent = '';
     $('#reconnote').innerHTML = '<b>' + esc(x.h) + '.</b> ' + esc(x.p);
     $('#game').textContent = '';
