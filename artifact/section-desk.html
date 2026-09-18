@@ -652,7 +652,6 @@ SELECT l.id                          AS listing_id,
        u.cmp                         AS cmp,
        u.floor_px                    AS floor_px,
        u.ceiling_px                  AS ceiling_px,
-       u.group_mode                  AS group_mode,
        u.priced_at                   AS priced_at,
        u.pricing_rows                AS pricing_rows
 FROM mcp_lysted_listings l
@@ -667,7 +666,6 @@ LEFT JOIN (
          argMax(cmp, calculated_at)                AS cmp,
          argMax(floor, calculated_at)              AS floor_px,
          argMax(ceiling, calculated_at)            AS ceiling_px,
-         argMax(group_mode, calculated_at)         AS group_mode,
          toString(max(calculated_at))              AS priced_at,
          count()                                   AS pricing_rows
   FROM mcp_uptick_pricing
@@ -1025,7 +1023,7 @@ async function loadSales(g, sec, ok, bag) {
       ['POS OST / tkt', (r) => money(per(zeroIsUnknown(r.pos_ost), r.qty)), 'num'],
       ['B2B gross / tkt', (r) => money(per(r.b2b_gross, r.qty)), 'num'],
       ['B2B OST / tkt', (r) => money(per(zeroIsUnknown(r.b2b_ost), r.qty)), 'num'],
-      ['In', (r) => badges([
+      ['Sources', (r) => badges([
         ['POS', 'uptick'],
         inB2b(r) && ['B2B', 'b2b'],
         inB2b(r) && Math.abs(Number(r.pos_gross) - Number(r.b2b_gross)) > 0.01
@@ -1086,7 +1084,7 @@ async function loadSales(g, sec, ok, bag) {
       ['Marketplace ref', (r) => r.b2b_ref, 'id'],
     ], '<b>One sale, up to four prices.</b> The POS pair comes from <code>mcp_sales</code> and the B2B pair from <code>mcp_lysted_sales</code>, joined exactly on <code>mcp_sales.id = mcp_lysted_sales.user_invoice_id</code> — not a section/row/date guess. ' +
       '<b>OST</b> is the broker’s side of the trade and the figure <b>Uptick displays</b>; <b>gross</b> is what the buyer paid including exchange fees. ' +
-      'The two OST figures agree; <b>the two gross figures often do not</b> — on one game, 4 of the 8 matched sales differed by about 1%, so at least one is derived rather than recorded. The <b>In</b> badges flag it per row. ' +
+      'The two OST figures agree; <b>the two gross figures often do not</b> — on one game, 4 of the 8 matched sales differed by about 1%, so at least one is derived rather than recorded. The <b>Sources</b> badges flag it per row. ' +
       'To look a sale up: in <b>B2B</b>, search the <b>marketplace ref</b> or the numeric <b>B2B sale id</b> / <b>line id</b>. In <b>Uptick</b> there is no invoice number — <code>mcp_sales.id</code> is an internal hash — so match on <b>account + event row + section/row + invoiced timestamp + marketplace + qty</b>. ' +
       'A dash means that system never sent the figure; it is not a zero. ' +
       '<b>Whole rows of dashes are not missing data either.</b> Every sale booked against a <code>Sync:</code> account — 82 of these games’ sales — has no <b>type</b> and no B2B side, because it did not go through Uptick or the consignment marketplace at all. ' +
@@ -1243,9 +1241,18 @@ async function loadBoard(g, sec, ok, bag) {
     return;
   }
 
+  const fanout = rows.filter((r) => Number(r.pricing_rows) > 1).length;
   table('#b2bbody', rows, [
     ...secCol(),
     ['Row', (r) => r.row, 'em'],
+    // Seats come from the marketplace, not the lake: mcp_lysted_listings.seats
+    // is a JSON column whose parquet holds arrays, and selecting it at all
+    // fails the read (INCORRECT_DATA).
+    ['Seats', (r) => {
+      if (r.market_only) return r.seats;
+      const m = matchOf.get(r);
+      return m ? m.seats : null;
+    }, 'id'],
     // Two quantity columns on purpose: the systems disagree about how many
     // tickets a listing holds, and one merged column would have to pick a side.
     ['Lake qty', (r) => (r.market_only ? null : num(r.quantity)), 'num'],
@@ -1257,21 +1264,16 @@ async function loadBoard(g, sec, ok, bag) {
         ? el('span', { className: 'flag', textContent: num(q) })
         : num(q);
     }, 'num'],
-    // One listing, one row, every system's price for it side by side.
-    // A 0 in any of these price columns means "not set", so it prints as a
-    // dash. Showing "$0.00" read as a free ticket and as an at-floor listing.
+    // One listing, one row, every system's price for it side by side. A 0 in
+    // any price column means "not set", so it prints as a dash -- "$0.00" read
+    // as a free ticket.
     ['B2B shows', (r) => money(b2bShows(r)), 'num'],
-    ['B2B connector', (r) => money(marketPrice(r)), 'num'],
+    ['B2B list', (r) => money(marketPrice(r)), 'num'],
     ['Lake list', (r) => money(zeroIsUnknown(r.price)), 'num'],
-    ['Uptick push', (r) => money(zeroIsUnknown(r.push_price)), 'num'],
-    // Presence, not price. The marketplace figure sits above the lake's list
-    // price by a per-listing markup, so a price-equality test would flag every
-    // healthy row as a mismatch. The markup itself gets its own column.
-    // Which systems carry this listing at all, which is a different question
-    // from whether their prices match.
+    ['Uptick list', (r) => money(zeroIsUnknown(r.push_price)), 'num'],
     // Presence only. A source with no badge is a source that does not have
     // this listing -- saying "not in lake" as well would be noise.
-    ['In', (r) => badges([
+    ['Sources', (r) => badges([
       marketPrice(r) !== null && ['B2B', 'b2b'],
       !r.market_only && ['Lake', 'lake'],
       (r.push_price !== null && r.push_price !== undefined) && ['Uptick', 'uptick'],
@@ -1280,28 +1282,26 @@ async function loadBoard(g, sec, ok, bag) {
       const shown = b2bShows(r), list = zeroIsUnknown(r.price);
       if (shown === null || list === null) return null;
       const pct = (shown / list - 1) * 100;
-      return (pct >= 0 ? '+' : '−') + Math.abs(pct).toFixed(1) + '%';
+      return (pct >= 0 ? '+' : '\u2212') + Math.abs(pct).toFixed(1) + '%';
     }, 'num'],
     ['Comp (cmp)', (r) => money(zeroIsUnknown(r.cmp)), 'num'],
     ['Floor', (r) => money(zeroIsUnknown(r.floor_px)), 'num'],
     ['Ceiling', (r) => money(zeroIsUnknown(r.ceiling_px)), 'num'],
-    /* Two different states get conflated if you only ask "is push at the
-       floor". When the calculated market price is BELOW the floor, the floor is
-       actively holding the listing above what Uptick thinks it is worth -- that
-       is worth distinguishing from a listing that merely happens to sit there. */
-    ['At floor', (r) => {
-      const push = zeroIsUnknown(r.push_price), floor = zeroIsUnknown(r.floor_px);
-      if (push === null || floor === null) return null;
-      if (push > floor + 0.005) return badge('above floor', 'ok');
-      const cmp = zeroIsUnknown(r.cmp);
-      return (cmp !== null && cmp < floor - 0.005)
-        ? badge('floor binding', 'warn') : badge('at floor', 'warn');
-    }, null],
-    ['Pricing rows', (r) => (Number(r.pricing_rows) > 1
-      ? badge(r.pricing_rows + ' rows', 'bad') : null), null],
-    ['Mode', (r) => (r.group_mode ? String(r.group_mode).toLowerCase() : null), null],
-    ['Priced at', (r) => (r.priced_at || '').slice(0, 16), 'id'],
+    /* Where the MARKET price sits against the configured band -- not where the
+       pushed price sits. Push is clamped into the band by definition and comes
+       back inside it on 81 of 81 priced listings, so a push-based status would
+       read "within" on every row. Comp varies and carries the signal: 43 below
+       the floor, 38 within, 0 above the ceiling on the game checked. */
     ['Status', (r) => {
+      const cmp = zeroIsUnknown(r.cmp);
+      const lo = zeroIsUnknown(r.floor_px), hi = zeroIsUnknown(r.ceiling_px);
+      if (cmp === null || (lo === null && hi === null)) return null;
+      if (lo !== null && cmp < lo - 0.005) return badge('below', 'warn');
+      if (hi !== null && cmp > hi + 0.005) return badge('above', 'bad');
+      return badge('within', 'ok');
+    }, null],
+    ['Priced at', (r) => (r.priced_at || '').slice(0, 16), 'id'],
+    ['Listing', (r) => {
       if (r.market_only) return null;          // the missing Lake badge says it
       if (String(r.deleted_at || '').trim()) return badge('deleted', 'bad');
       const s = String(r.status || '').toUpperCase();
@@ -1318,36 +1318,30 @@ async function loadBoard(g, sec, ok, bag) {
     ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
     ['Stock', (r) => (r.stock_type
       ? String(r.stock_type).toLowerCase().replace(/_/g, ' ') : null), null],
-    // Seats come from the marketplace, not the lake: mcp_lysted_listings.seats
-    // is a JSON column whose parquet holds arrays, and selecting it at all
-    // fails the read (INCORRECT_DATA).
-    ['Seats', (r) => {
-      if (r.market_only) return r.seats;
-      const m = matchOf.get(r);
-      return m ? m.seats : null;
-    }, 'id'],
     ['Updated', (r) => (r.updated_at || '').slice(0, 16), 'id'],
     ['Listing id', (r) => r.listing_id, 'id'],
     ['Org', (r) => r.org_id, 'id'],
   ], (liveErr
       ? '<b>' + esc(explain(liveErr).h) + '.</b> ' + esc(explain(liveErr).p) + ' The lake column still reads live. '
       : '') +
-    '<b>One listing, up to four prices.</b> <b>B2B shows</b> is the figure on the B2B screen, derived as the connector price ÷ 1.03 — checked against two listings read off that screen and exact to the cent both times. ' +
-    '<b>B2B connector</b> is what the API returns (cents, converted), which runs exactly 3% above the displayed figure. ' +
-    '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
-    '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
-    '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
-    'The four price columns are <b>the same ticket seen from four places</b>, cheapest first: what <b>Uptick decided</b>, what the <b>lake recorded</b> the broker listing at, and what <b>B2B displays</b> and its <b>API returns</b> after the marketplace adds its markup and its 3%. ' +
-    'Uptick push and lake list agree wherever the autopricer is driving the listing — that is Uptick writing the price the lake then records.<br><br>' +
+    '<b>One listing, up to four prices.</b> <b>B2B shows</b> is the figure on the B2B screen, derived as the API price ÷ 1.03 — checked against two listings read off that screen and exact to the cent both times. ' +
+    '<b>B2B list</b> is what the API returns (cents, converted), which runs exactly 3% above the displayed figure. ' +
+    '<b>Lake list</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
+    '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is its own column rather than folded in. ' +
+    '<b>Uptick list</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>snapshot</b>, every row in one pull stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
+    'Uptick list and lake list agree wherever the autopricer is driving the listing: that is Uptick writing the price the lake then records.<br><br>' +
     '<b>Comp (cmp)</b> is Uptick’s <b>Calculated Market Price</b>: its live estimate of what the seat is worth, computed <b>ignoring</b> the floor and ceiling. ' +
     '<b>Floor</b> and <b>ceiling</b> are the bounds configured for the listing; a ceiling of 0 means none is set, so it shows as a dash. ' +
-    'Push is the comp clamped into those bounds, which is what makes the columns worth reading together: <b>floor binding</b> means the comp is <em>below</em> the floor, so Uptick wanted to go lower and the floor stopped it — e.g. section 101 row T, comp $196.83 against a floor of $210.00, pushed at $210.00 and displayed on B2B at $225.16 once the markup is added. ' +
-    '<b>at floor</b> is the milder case: sitting on the floor with the comp at or above it. The markup lives outside Uptick entirely, so a B2B price above the floor is the marketplace’s doing, not the autopricer’s. ' +
-    '<b>Pricing rows</b> is a guard, normally empty: the pricing table’s grain is (listing_id, account_id) with a component type, so a listing carrying more than one row is flagged rather than silently duplicated.<br><br>' +
+    '<b>Status</b> is where the <b>comp</b> sits against those bounds — deliberately the comp and not the listed price, because Uptick clamps its price into the band by construction and it lands inside on 81 of 81 priced listings, so a price-based status would read <em>within</em> on every row. ' +
+    '<b>below</b>: the market is under your floor, so the floor is holding the listing above what Uptick thinks it is worth — section 101 row T has a comp of $196.83 against a floor of $210.00, lists at $210.00, and shows on B2B at $225.16 once the markup is added. ' +
+    '<b>above</b>: the market is over your ceiling, so the ceiling is capping it. <b>within</b>: the autopricer is free to track the market. On the game checked, 43 below, 38 within, none above. ' +
+    'The markup lives outside Uptick entirely, so a B2B price above the floor is the marketplace’s doing, not the autopricer’s.<br><br>' +
     'Every listing from any source appears, matched on <b>section + row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
     'That is why there are two quantity columns, with the B2B one flagged when it differs. ' +
-    'The <b>In</b> badges say which systems carry the listing — a source with no badge does not have it, which is a different question from whether the prices or quantities agree. ' +
-    'Only <b>active</b> and <b>ready</b> rows are on sale; <b>sold</b> and <b>deleted</b> rows are kept because they explain an empty board.');
+    'The <b>Sources</b> badges say which systems carry the listing — a source with no badge does not have it, which is a different question from whether the prices or quantities agree. ' +
+    'Only <b>active</b> and <b>ready</b> rows are on sale; <b>sold</b> and <b>deleted</b> rows are kept because they explain an empty board.' +
+    (fanout ? ' <b>' + fanout + (fanout === 1 ? ' listing here carries' : ' listings here carry')
+      + ' more than one Uptick pricing row</b> — that table is keyed on (listing_id, account_id) with a component type, so the newest row per listing is shown rather than duplicating the listing.' : ''));
 
   renderRecon(bag);
 }
