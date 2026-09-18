@@ -101,6 +101,51 @@ is the figure comparable to a sale's gross.
 Of the five retail boards, only VividSeats had coverage for these games when
 last checked.
 
+## 5a. `status` has a sixth value the docs do not mention: `DEPLETED`
+
+The column notes on `mcp_lysted_listings.status` list four values — `ACTIVE`,
+`READY`, `SOLD`, `HOLD`. Two more occur: `DELETED` and `DEPLETED`. Across the
+Timberwolves season:
+
+| status | listings | `quantity` | ticket rows | invoiced | rows with no tickets |
+|---|---|---|---|---|---|
+| ACTIVE | 2,557 | 18,443 | 18,443 | 0 | 0 |
+| READY | 211 | 822 | 822 | 0 | 0 |
+| SOLD | 128 | 332 | 332 | **332** | 0 |
+| HOLD | 19 | 35 | 35 | 0 | 0 |
+| **DEPLETED** | **4** | **0** | **0** | 0 | **4** |
+| DELETED | 2 | 6 | 6 | 0 | 0 |
+
+**`DEPLETED` is a listing whose tickets have all been moved off it** — an empty
+shell, not a sold-out one. It is the only status carrying zero-quantity rows, it
+is 4 of 4, and `mcp_lysted_tickets` has no row for any of them. Sold-out is
+`SOLD`, where all 332 tickets are invoiced; removed is `DELETED`, which sets
+`deleted_at`. A depleted listing has neither: no sale in `mcp_lysted_sales`, and
+`deleted_at` null.
+
+What it actually is, is the remnant of a split or re-group. Every one of the four
+sits in a section+row that still holds a live sibling, and keeps that sibling's
+price:
+
+| game | sec/row | DEPLETED | live sibling | also |
+|---|---|---|---|---|
+| 5K44D3JP | 212/Q | qty 0 @ $0 | ACTIVE 11 @ $71.06 | SOLD 1 @ $71.06 |
+| 7PGZEY56 | 223/Q | qty 0 @ $174 | ACTIVE 12 @ $168 | — |
+| DPYXDW9M | 120/C | qty 0 @ $455 | ACTIVE 1 @ $400 | SOLD 6 @ $455 |
+| PG3ANEY3 | 111/G | qty 0 @ $640 | ACTIVE 4 @ $640 | — |
+
+The trap: a depleted shell still reads `broadcast = true`, keeps a real price,
+and on 3 of 4 still has `auto_pricing_enabled = true`. It looks live in every
+column except quantity. The `status IN ('ACTIVE','READY')` filter in §5 excludes
+it, which is the reason to use that filter rather than `deleted_at IS NULL`
+alone — the latter keeps all four.
+
+**The same table also contradicts itself on `quantity`.** Its notes say the
+figure is "the original quantity, not a remaining-available count", and direct
+you to `mcp_lysted_tickets` to find what is left. It is not: `quantity` equals
+live ticket rows exactly, in every status, on all 3,077 listings above. Depleted
+listings are the proof — original quantity cannot be 0.
+
 ## 6. Uptick's pricing state is a daily snapshot
 
 `mcp_uptick_pricing` — `push_price`, `cmp`, `floor`, `ceiling`, `group_mode`.
