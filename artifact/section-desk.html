@@ -237,6 +237,26 @@
   }
   .flag.ok { background: var(--b2b-soft); color: var(--ok); }
 
+  /* One badge vocabulary for every categorical cell, so provenance and state
+     read at a glance instead of as columns of prose. Presence is the message:
+     a source with no badge is a source that does not have the row. */
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 600; line-height: 1.5;
+    letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .badge + .badge { margin-left: 4px; }
+  .b-b2b    { background: var(--b2b-soft);    color: var(--b2b); }
+  .b-uptick { background: var(--pos-soft);    color: var(--pos); }
+  .b-retail { background: var(--retail-soft); color: var(--retail); }
+  /* The lake is where the record is kept, not a marketplace, so it stays
+     neutral rather than taking a fourth hue. */
+  .b-lake   { background: var(--surface-2); color: var(--ink-2); border-color: var(--line-strong); }
+  .b-ok     { background: var(--b2b-soft);    color: var(--ok); }
+  .b-warn   { background: var(--retail-soft); color: var(--warn); }
+  .b-bad    { background: var(--bad-soft);    color: var(--bad); }
+  .b-mute   { color: var(--ink-3); border-color: var(--line); }
+
   /* ---------------------------------------------------------- notes */
   .note {
     font-size: 12px; color: var(--ink-2); background: var(--surface-2);
@@ -286,7 +306,7 @@
     <div class="fld">
       <label for="sec">Section</label>
       <div class="pair">
-        <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="all">
+        <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="all" aria-label="Sections, comma separated" title="One or more sections, e.g. 209, 235">
         <button id="clearsec" type="button" hidden>All sections</button>
       </div>
     </div>
@@ -377,9 +397,28 @@ const SEASON = { from: '2026-10-01', to: '2027-06-30' };
 const DL = 'Datalake MCP', DLQ = 'DataLakeInternalQuery';
 const B2B = 'B2B MCP', B2BL = 'search_listings';
 
-const state = { mcp: null, games: [], game: null, section: null, activity: new Map(), seq: 0 };
+/** `sections` is a set of canonical keys; empty means every section. */
+const state = { mcp: null, games: [], game: null, sections: [], activity: new Map(), seq: 0 };
 const $ = (s) => document.querySelector(s);
 const el = (t, a) => Object.assign(document.createElement(t), a || {});
+
+const hasScope = () => state.sections.length > 0;
+const inScope = (k) => !hasScope() || state.sections.indexOf(k) !== -1;
+
+/** One badge. `kind` is a b-* class: b2b, uptick, lake, retail, ok, warn, bad, mute. */
+const badge = (text, kind) =>
+  el('span', { className: 'badge b-' + kind, textContent: text });
+
+/** Several badges in one cell. Entries are [text, kind]; falsy ones are skipped. */
+function badges(list) {
+  const items = list.filter(Boolean);
+  if (!items.length) return null;
+  const frag = document.createDocumentFragment();
+  items.forEach(([text, kind]) => frag.append(badge(text, kind)));
+  return frag;
+}
+const yesNo = (v, yes, no) => (v === true ? badge(yes, 'ok')
+  : v === false ? badge(no, 'mute') : null);
 
 /* ------------------------------------------------------------- helpers */
 const BOWL_PREFIX = /^(lower|upper|club|suite|main|balcony|mezzanine)\s+(level|lvl)\s+/i;
@@ -529,10 +568,12 @@ GROUP BY section`;
    IN(subquery) set -- NOT_FOUND_COLUMN_IN_BLOCK on `deleted_at.null`. The
    column is selected as text instead and the check happens in the page. */
 
-/* `sec` may be null, which means every section of the game. The section box is
-   a filter, and an empty filter is a legitimate scope -- making it mandatory
-   put a game's whole board out of reach. */
-const secClause = (col, sec) => (sec ? `\n  AND ${col} = ${sqlStr(sec)}` : '');
+/* `secs` is a list of sections, and an empty list means every section of the
+   game. An empty filter is a legitimate scope -- making it mandatory put a
+   game's whole board out of reach. */
+const secList = (secs) => secs.map(sqlStr).join(', ');
+const secClause = (col, secs) =>
+  (secs && secs.length ? `\n  AND ${col} IN (${secList(secs)})` : '');
 
 /* One row per SALE, with each system's view of it side by side.
    mcp_sales.id IS mcp_lysted_sales.user_invoice_id -- an exact join, not a
@@ -635,11 +676,11 @@ SELECT p.inventory_id                                  AS inventory_id,
 FROM mcp_prism_vividseats_event_listings p
 WHERE p.event_id = ${sqlStr(vsId)}
   AND p.processed_date = (SELECT d FROM latest)
-  AND p.is_active${sec ? `
+  AND p.is_active${sec && sec.length ? `
   AND replaceRegexpOne(
         replaceRegexpOne(ifNull(p.section, ''),
           '(?i)^(lower|upper|club|suite|main|balcony|mezzanine)[ ]+(level|lvl)[ ]+', ''),
-        '^0+', '') = ${sqlStr(sec)}` : ''}
+        '^0+', '') IN (${secList(sec)})` : ''}
 ORDER BY all_in_per_ticket
 LIMIT 300`;
 
@@ -672,7 +713,7 @@ function setState(hostId, kind, a, b) {
 
 /** A leading Section column, only when the scope is the whole game. */
 function secCol(pick) {
-  if (state.section) return [];
+  if (state.sections.length === 1) return [];
   return [['Section', pick || ((r) => secKey(r.section) || r.section), 'em']];
 }
 
@@ -750,13 +791,13 @@ function drawMap() {
     const rect = mk('rect', {
       x: t.x, y: t.y, width: t.w, height: t.h, rx: .5,
       transform: 'rotate(' + t.a + ' ' + (t.x + t.w / 2) + ' ' + (t.y + t.h / 2) + ')',
-      class: 'tile ' + (state.section === sec ? 'sel' : (act ? 'has' : 'empty')),
+      class: 'tile ' + (state.sections.indexOf(sec) !== -1 ? 'sel' : (act ? 'has' : 'empty')),
     });
     rect.append(mk('title', {}));
     rect.querySelector('title').textContent = act
       ? 'Section ' + sec + ' — ' + (act.sales || 0) + ' sales, ' + (act.b2b || 0) + ' B2B listings'
       : 'Section ' + sec + ' — nothing on either board';
-    rect.addEventListener('click', () => pick(sec));
+    rect.addEventListener('click', () => toggle(sec));
     const label = mk('text', {
       x: t.x + t.w / 2, y: t.y + t.h / 2 + .75, class: 'lbl', 'text-anchor': 'middle',
     });
@@ -767,15 +808,32 @@ function drawMap() {
 }
 
 /* --------------------------------------------------------------- flow */
-/** Select a section, or clear back to the whole game by picking it again. */
-function pick(sec) {
-  state.section = (sec && sec !== state.section) ? sec : null;
-  $('#sec').value = state.section || '';
-  $('#clearsec').hidden = !state.section;
+/** Toggle one section in or out of the scope. */
+function toggle(sec) {
+  if (!sec) return;
+  const i = state.sections.indexOf(sec);
+  if (i === -1) state.sections.push(sec); else state.sections.splice(i, 1);
+  applyScope();
+}
+
+/** Replace the whole scope. An empty list means every section. */
+function setScope(secs) {
+  state.sections = secs.slice();
+  applyScope();
+}
+
+function applyScope() {
+  $('#sec').value = state.sections.join(', ');
+  $('#clearsec').hidden = !hasScope();
   drawMap();
-  $('#mapsub').textContent = state.section
-    ? 'Section ' + state.section + ' — click again for all'
-    : (state.activity.size ? state.activity.size + ' sections with activity' : 'Pick a section');
+  $('#mapsub').textContent = hasScope()
+    ? scopeLabel() + ' — click to add or remove'
+    : (state.activity.size ? state.activity.size + ' sections with activity — click to filter'
+                           : 'Click sections to filter');
+  const chips = $('#oddchips').children;
+  for (let i = 0; i < chips.length; i++) {
+    chips[i].setAttribute('aria-pressed', String(inScope(chips[i].textContent)));
+  }
   loadSection();
 }
 
@@ -834,19 +892,20 @@ async function loadActivity() {
     $('#oddcard').hidden = odd.length === 0;
     odd.forEach((k) => {
       const b = el('button', { className: 'chip', textContent: k, type: 'button' });
-      b.setAttribute('aria-pressed', String(state.section === k));
-      b.addEventListener('click', () => pick(k));
+      b.setAttribute('aria-pressed', String(inScope(k)));
+      b.addEventListener('click', () => toggle(k));
       oddHost.append(b);
     });
     // Open on the WHOLE GAME, not a section. Landing on one section made a
     // game's entire board unreachable -- a quiet section read as "no listings".
-    if (state.section && !map.has(state.section)) {
-      state.section = null;
-      $('#sec').value = '';
-    }
-    $('#mapsub').textContent = state.section
-      ? 'Section ' + state.section + ' — click again for all'
-      : map.size + ' sections with activity';
+    // Drop any selected section this game has no activity in, so the scope
+    // cannot silently filter everything away after switching games.
+    state.sections = state.sections.filter((k) => map.has(k));
+    $('#sec').value = state.sections.join(', ');
+    $('#clearsec').hidden = !hasScope();
+    $('#mapsub').textContent = hasScope()
+      ? scopeLabel() + ' — click to add or remove'
+      : map.size + ' sections with activity — click to filter';
     drawMap();
     loadSection();
   } catch (e) {
@@ -858,7 +917,7 @@ async function loadActivity() {
     $('#mapnote').hidden = false;
     setState('#mapnote', 'err', Object.assign({}, x, { h: 'Section shading unavailable' }));
     $('#mapsub').textContent = 'Type a section';
-    if (state.section) {
+    if (hasScope()) {
       loadSection();
     } else {
       ['#salesbody', '#b2bbody', '#retailbody']
@@ -870,19 +929,29 @@ async function loadActivity() {
 }
 
 function scopeLabel() {
-  return state.section ? 'section ' + state.section : 'all sections';
+  const n = state.sections.length;
+  if (!n) return 'all sections';
+  if (n === 1) return 'section ' + state.sections[0];
+  if (n <= 6) return n + ' sections: ' + state.sections.join(', ');
+  return n + ' sections';
+}
+
+function scopeTitle() {
+  const n = state.sections.length;
+  if (!n) return 'Whole game';
+  if (n === 1) return 'Section ' + state.sections[0];
+  return 'Sections ' + state.sections.join(', ');
 }
 
 function loadSection() {
-  const g = state.game, sec = state.section;
+  const g = state.game, sec = state.sections;
   if (!g) return;
   const mine = ++state.seq;
   const ok = () => mine === state.seq;
-  $('#recontitle').textContent = (sec ? 'Section ' + sec : 'Whole game')
-    + ' · ' + (g.event_date || '');
+  $('#recontitle').textContent = scopeTitle() + ' · ' + (g.event_date || '');
   ['#salesbody', '#b2bbody', '#retailbody'].forEach((h) => setState(h, 'load'));
   $('#b2btotals').textContent = '';
-  $('#clearsec').hidden = !sec;
+  $('#clearsec').hidden = !hasScope();
   $('#recon').textContent = '';
   $('#reconnote').textContent = '';
 
@@ -923,13 +992,12 @@ async function loadSales(g, sec, ok, bag) {
       ['POS OST / tkt', (r) => money(per(zeroIsUnknown(r.pos_ost), r.qty)), 'num'],
       ['B2B gross / tkt', (r) => money(per(r.b2b_gross, r.qty)), 'num'],
       ['B2B OST / tkt', (r) => money(per(zeroIsUnknown(r.b2b_ost), r.qty)), 'num'],
-      ['In', (r) => (inB2b(r)
-        ? el('span', {
-            className: Math.abs(Number(r.pos_gross) - Number(r.b2b_gross)) > 0.01 ? 'flag' : 'flag ok',
-            textContent: Math.abs(Number(r.pos_gross) - Number(r.b2b_gross)) > 0.01
-              ? 'POS + B2B, gross differs' : 'POS + B2B',
-          })
-        : el('span', { className: 'miss', textContent: 'POS only' })), null],
+      ['In', (r) => badges([
+        ['POS', 'uptick'],
+        inB2b(r) && ['B2B', 'b2b'],
+        inB2b(r) && Math.abs(Number(r.pos_gross) - Number(r.b2b_gross)) > 0.01
+          && ['gross differs', 'bad'],
+      ]), null],
       ['Cost / tkt', (r) => money(per(zeroIsUnknown(r.cost_total), r.qty)), 'num'],
       ['POS gross total', (r) => money(r.pos_gross), 'num'],
       ['POS OST total', (r) => money(zeroIsUnknown(r.pos_ost)), 'num'],
@@ -940,10 +1008,16 @@ async function loadSales(g, sec, ok, bag) {
       ['B2B revenue', (r) => money(r.b2b_revenue), 'num'],
       ['Marketplace', (r) => r.marketplace, null],
       ['Type', (r) => r.sale_type, null],
-      ['Uptick-priced', (r) => (r.priced_by_uptick === true ? 'yes' : r.priced_by_uptick === false ? 'no' : null), null],
-      ['Fulfilment', (r) => r.b2b_fulfilment, null],
+      ['Uptick-priced', (r) => (r.priced_by_uptick === true ? badge('yes', 'uptick')
+        : r.priced_by_uptick === false ? badge('no', 'mute') : null), null],
+      ['Fulfilment', (r) => {
+        const f = String(r.b2b_fulfilment || '').toUpperCase();
+        if (!f) return null;
+        return badge(f.toLowerCase(),
+          f === 'COMPLETE' ? 'ok' : f === 'PENDING' ? 'warn' : 'mute');
+      }, null],
       ['Organization', (r) => r.b2b_org, null],
-      ['Consigned', (r) => (r.b2b_consigned === true ? 'yes' : r.b2b_consigned === false ? 'no' : null), null],
+      ['Consigned', (r) => yesNo(r.b2b_consigned, 'yes', 'no'), null],
       ['POS', (r) => r.pos, null],
       ['Account', (r) => r.account_id, 'id'],
       ['Processor', (r) => r.processor, null],
@@ -957,7 +1031,7 @@ async function loadSales(g, sec, ok, bag) {
       ['Marketplace ref', (r) => r.b2b_ref, 'id'],
     ], '<b>One sale, up to four prices.</b> The POS pair comes from <code>mcp_sales</code> and the B2B pair from <code>mcp_lysted_sales</code>, joined exactly on <code>mcp_sales.id = mcp_lysted_sales.user_invoice_id</code> — not a section/row/date guess. ' +
       '<b>OST</b> is the broker’s side of the trade and the figure <b>Uptick displays</b>; <b>gross</b> is what the buyer paid including exchange fees. ' +
-      'The two OST figures agree; <b>the two gross figures often do not</b> — on one game, 4 of the 8 matched sales differed by about 1%, so at least one is derived rather than recorded. The <b>In</b> column flags it per row. ' +
+      'The two OST figures agree; <b>the two gross figures often do not</b> — on one game, 4 of the 8 matched sales differed by about 1%, so at least one is derived rather than recorded. The <b>In</b> badges flag it per row. ' +
       'To look a sale up: in <b>B2B</b>, search the <b>marketplace ref</b> or the numeric <b>B2B sale id</b> / <b>line id</b>. In <b>Uptick</b> there is no invoice number — <code>mcp_sales.id</code> is an internal hash — so match on <b>account + event row + section/row + invoiced timestamp + marketplace + qty</b>. ' +
       'A dash means that system never sent the figure; it is not a zero.');
     renderRecon(bag);
@@ -987,7 +1061,7 @@ async function loadBoard(g, sec, ok, bag) {
   if (!ok()) return;
 
   stamp($('#b2bstamp'), lakeRes);
-  const liveHere = sec ? (live || []).filter((l) => secKey(l.section) === sec) : (live || []);
+  const liveHere = (live || []).filter((l) => inScope(secKey(l.section)));
   bag.board = lake; bag.live = liveHere;
   // A listing is on sale only if it is broadcastable AND not soft-deleted. The
   // delete check is done here because ClickHouse cannot do it in the query.
@@ -1126,22 +1200,13 @@ async function loadBoard(g, sec, ok, bag) {
     // healthy row as a mismatch. The markup itself gets its own column.
     // Which systems carry this listing at all, which is a different question
     // from whether their prices match.
-    ['In', (r) => {
-      const where = [];
-      if (marketPrice(r) !== null) where.push('B2B');
-      if (!r.market_only) where.push('lake');
-      if (r.push_price !== null && r.push_price !== undefined) where.push('Uptick');
-      const txt = where.join(' + ') || '—';
-      if (r.market_only) return el('span', { className: 'flag', textContent: txt + ', not in lake' });
-      if (marketPrice(r) === null) {
-        const why = String(r.deleted_at || '').trim() ? 'deleted'
-          : (!onSale(r) ? (r.status || '?').toLowerCase() : null);
-        return why
-          ? el('span', { className: 'miss', textContent: txt + ' — ' + why })
-          : el('span', { className: 'flag', textContent: txt + ', not on B2B' });
-      }
-      return el('span', { className: 'flag ok', textContent: txt });
-    }, null],
+    // Presence only. A source with no badge is a source that does not have
+    // this listing -- saying "not in lake" as well would be noise.
+    ['In', (r) => badges([
+      marketPrice(r) !== null && ['B2B', 'b2b'],
+      !r.market_only && ['Lake', 'lake'],
+      (r.push_price !== null && r.push_price !== undefined) && ['Uptick', 'uptick'],
+    ]), null],
     ['Markup', (r) => {
       const shown = b2bShows(r), list = Number(r.price);
       if (shown === null || !Number.isFinite(list) || list <= 0) return null;
@@ -1150,22 +1215,27 @@ async function loadBoard(g, sec, ok, bag) {
     ['Comp (cmp)', (r) => money(r.cmp), 'num'],
     ['Floor', (r) => money(r.floor_px), 'num'],
     ['Ceiling', (r) => money(r.ceiling_px), 'num'],
-    ['At floor', (r) => (r.push_price !== null && r.push_price !== undefined
-      && Number(r.floor_px) > 0 && Number(r.push_price) <= Number(r.floor_px) + 0.005
-      ? el('span', { className: 'flag', textContent: 'yes' })
-      : (r.push_price === null || r.push_price === undefined ? null : 'no')), null],
-    ['Mode', (r) => r.group_mode, null],
+    ['At floor', (r) => {
+      if (r.push_price === null || r.push_price === undefined) return null;
+      return (Number(r.floor_px) > 0 && Number(r.push_price) <= Number(r.floor_px) + 0.005)
+        ? badge('at floor', 'warn') : badge('above floor', 'mute');
+    }, null],
+    ['Mode', (r) => (r.group_mode ? badge(r.group_mode.toLowerCase(), 'mute') : null), null],
     ['Priced at', (r) => (r.priced_at || '').slice(0, 16), 'id'],
     ['Status', (r) => {
-      if (r.market_only) return el('span', { className: 'flag', textContent: 'marketplace only' });
-      return String(r.deleted_at || '').trim()
-        ? el('span', { className: 'flag', textContent: 'deleted' })
-        : r.status;
+      if (r.market_only) return null;          // the missing Lake badge says it
+      if (String(r.deleted_at || '').trim()) return badge('deleted', 'bad');
+      const s = String(r.status || '').toUpperCase();
+      if (s === 'ACTIVE' || s === 'READY') return badge(s.toLowerCase(), 'ok');
+      if (s === 'SOLD') return badge('sold', 'mute');
+      return s ? badge(s.toLowerCase(), 'warn') : null;
     }, null],
-    ['Broadcast', (r) => (r.broadcast === true ? 'yes' : r.broadcast === false ? 'no' : null), null],
-    ['Autopricing', (r) => (r.autopricing === true ? 'on' : r.autopricing === false ? 'off' : null), null],
+    ['Broadcast', (r) => yesNo(r.broadcast, 'on', 'off'), null],
+    ['Autopricing', (r) => (r.autopricing === true ? badge('on', 'uptick')
+      : r.autopricing === false ? badge('off', 'mute') : null), null],
     ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
-    ['Stock', (r) => (r.stock_type || '').toLowerCase().replace(/_/g, ' '), null],
+    ['Stock', (r) => (r.stock_type
+      ? badge(String(r.stock_type).toLowerCase().replace(/_/g, ' '), 'mute') : null), null],
     // Seats come from the marketplace, not the lake: mcp_lysted_listings.seats
     // is a JSON column whose parquet holds arrays, and selecting it at all
     // fails the read (INCORRECT_DATA).
@@ -1186,8 +1256,9 @@ async function loadBoard(g, sec, ok, bag) {
     '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
     '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
     'Every listing from any source appears, matched on <b>row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
-    'That is why there are two quantity columns, with the B2B one flagged when it differs. <b>In</b> says which systems carry the listing, which is a different question from whether their prices or quantities agree. ' +
-    'Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
+    'That is why there are two quantity columns, with the B2B one flagged when it differs. ' +
+    'The <b>In</b> badges say which systems carry the listing — a source with no badge does not have it, which is a different question from whether the prices or quantities agree. ' +
+    'Only <b>active</b> and <b>ready</b> rows are on sale; <b>sold</b> and <b>deleted</b> rows are kept because they explain an empty board.');
 
   renderRecon(bag);
 }
@@ -1295,8 +1366,8 @@ async function loadRetail(g, sec, ok, bag) {
       ['Ask', (r) => money(r.price), 'num'],
       ['All-in / tkt', (r) => money(r.all_in_per_ticket), 'num'],
       ['View score', (r) => (r.view_score === null || r.view_score === undefined ? null : Number(r.view_score).toFixed(1)), 'num'],
-      ['Ticket type', (r) => (r.ticket_type || '').toLowerCase(), null],
-      ['Transfer', (r) => (r.transfer_type || '').toLowerCase(), null],
+      ['Ticket type', (r) => (r.ticket_type ? badge(String(r.ticket_type).toLowerCase(), 'mute') : null), null],
+      ['Transfer', (r) => (r.transfer_type ? badge(String(r.transfer_type).toLowerCase(), 'retail') : null), null],
       ['Section label', (r) => r.section_name, null],
       ['Inventory id', (r) => r.inventory_id, 'id'],
     ], '<b>Anyone’s tickets, one exchange.</b> These are the asks a retail buyer sees on VividSeats for this game — your inventory and your competitors’ mixed together, with no seller identity in the feed, so a row here is <b>not</b> another source for one of your listings. That is why this is its own table. ' +
@@ -1383,17 +1454,21 @@ function renderFoot() {
 
 /* --------------------------------------------------------------- boot */
 function bindUI() {
-  $('#game').addEventListener('change', (e) => { state.section = null; setGame(e.target.value); });
+  $('#game').addEventListener('change', (e) => { state.sections = []; setGame(e.target.value); });
   const secIn = $('#sec');
   const commit = () => {
-    const k = secKey(secIn.value);
     // An empty box is a valid scope: the whole game.
-    if (!k) { state.section = null; pick(null); return; }
-    if (k !== state.section) pick(k); else secIn.value = k;
+    // Accepts a list: "209, 235 138" is three sections.
+    const keys = [];
+    String(secIn.value).split(/[^A-Za-z0-9]+/).forEach((part) => {
+      const key = secKey(part);
+      if (key && keys.indexOf(key) === -1) keys.push(key);
+    });
+    setScope(keys);
   };
   secIn.addEventListener('change', commit);
   secIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
-  $('#clearsec').addEventListener('click', () => { secIn.value = ''; commit(); });
+  $('#clearsec').addEventListener('click', () => setScope([]));
   $('#refresh').addEventListener('click', async () => {
     const b = $('#refresh');
     b.disabled = true; b.textContent = 'Refreshing…';
