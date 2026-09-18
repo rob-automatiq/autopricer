@@ -303,6 +303,33 @@ number: `mcp_sync_listings` has a `shown_quantity` column alongside `quantity`,
 so a listing holding ten tickets while offering six is a normal state, not a
 fault.
 
+## 14b. Two `mcp_sales` columns carry no information
+
+Across all Timberwolves home games (608 sales):
+
+**`if_brokergenius` restates `type`.** It is not an independent flag:
+
+| `type` | `if_brokergenius` | sales |
+|---|---|---|
+| `Manual` | false | 419 |
+| `Full Service` | true | 95 |
+| `License` | true | 11 |
+| null | null | 82 |
+
+One-to-one, no exceptions. Show one of them, not both.
+
+**`processor` is `SeatScouts` on 596 of 608** — `Other` on 10, null on 2. Not
+quite constant, so do not assert it is, but it does not earn a column.
+
+**A null `type` is not missing data.** It means the sale was booked against a
+`Sync:` account rather than an `Uptick:` one, so it never went through Uptick
+or the consignment marketplace: all 82 null-`type` rows are `Sync:` accounts,
+and every `Uptick:` account row has a value. Those rows have no B2B side
+either. The account prefix is the thing to read.
+
+`anchor` does carry signal — `Other` 481, null 82, `Automatiq Feed` 45 — and
+`last_touched_email` is populated on 106 of 608.
+
 ## 15. B2B's event list disagrees with B2B's own listing view
 
 For 2026-10-28, B2B's event-list row reports **157 listings, 606 tickets,
