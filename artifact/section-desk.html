@@ -650,12 +650,32 @@ SELECT l.id                          AS listing_id,
        ifNull(toString(l.deleted_at), '') AS deleted_at,
        u.push_price                  AS push_price,
        u.cmp                         AS cmp,
-       u.floor                       AS floor_px,
-       u.ceiling                     AS ceiling_px,
+       u.floor_px                    AS floor_px,
+       u.ceiling_px                  AS ceiling_px,
        u.group_mode                  AS group_mode,
-       toString(u.calculated_at)     AS priced_at
+       u.priced_at                   AS priced_at,
+       u.pricing_rows                AS pricing_rows
 FROM mcp_lysted_listings l
-LEFT JOIN mcp_uptick_pricing u ON u.listing_id = l.id
+/* The pricing table's grain is (listing_id, account_id) with a
+   component_type_id, so its own docs warn listing_id is not unique. It happens
+   to be 1:1 for this game (84 of 84), but a group or split component would fan
+   the listing table out silently, so it is collapsed to the newest row per
+   listing and the count is carried through to be shown. */
+LEFT JOIN (
+  SELECT listing_id,
+         argMax(push_price, calculated_at)         AS push_price,
+         argMax(cmp, calculated_at)                AS cmp,
+         argMax(floor, calculated_at)              AS floor_px,
+         argMax(ceiling, calculated_at)            AS ceiling_px,
+         argMax(group_mode, calculated_at)         AS group_mode,
+         toString(max(calculated_at))              AS priced_at,
+         count()                                   AS pricing_rows
+  FROM mcp_uptick_pricing
+  WHERE listing_id IN (
+    SELECT id FROM mcp_lysted_listings WHERE event_id_with_pos IN ${evScope(b2b)}
+  )
+  GROUP BY listing_id
+) u ON u.listing_id = l.id
 WHERE l.event_id_with_pos IN ${evScope(b2b)}${secClause('l.section', sec)}
 ORDER BY l.section, l.price
 LIMIT 400`;
@@ -1265,11 +1285,20 @@ async function loadBoard(g, sec, ok, bag) {
     ['Comp (cmp)', (r) => money(zeroIsUnknown(r.cmp)), 'num'],
     ['Floor', (r) => money(zeroIsUnknown(r.floor_px)), 'num'],
     ['Ceiling', (r) => money(zeroIsUnknown(r.ceiling_px)), 'num'],
+    /* Two different states get conflated if you only ask "is push at the
+       floor". When the calculated market price is BELOW the floor, the floor is
+       actively holding the listing above what Uptick thinks it is worth -- that
+       is worth distinguishing from a listing that merely happens to sit there. */
     ['At floor', (r) => {
       const push = zeroIsUnknown(r.push_price), floor = zeroIsUnknown(r.floor_px);
       if (push === null || floor === null) return null;
-      return push <= floor + 0.005 ? badge('at floor', 'warn') : badge('above floor', 'ok');
+      if (push > floor + 0.005) return badge('above floor', 'ok');
+      const cmp = zeroIsUnknown(r.cmp);
+      return (cmp !== null && cmp < floor - 0.005)
+        ? badge('floor binding', 'warn') : badge('at floor', 'warn');
     }, null],
+    ['Pricing rows', (r) => (Number(r.pricing_rows) > 1
+      ? badge(r.pricing_rows + ' rows', 'bad') : null), null],
     ['Mode', (r) => (r.group_mode ? String(r.group_mode).toLowerCase() : null), null],
     ['Priced at', (r) => (r.priced_at || '').slice(0, 16), 'id'],
     ['Status', (r) => {
@@ -1308,6 +1337,13 @@ async function loadBoard(g, sec, ok, bag) {
     '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
     '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
     '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
+    'The four price columns are <b>the same ticket seen from four places</b>, cheapest first: what <b>Uptick decided</b>, what the <b>lake recorded</b> the broker listing at, and what <b>B2B displays</b> and its <b>API returns</b> after the marketplace adds its markup and its 3%. ' +
+    'Uptick push and lake list agree wherever the autopricer is driving the listing — that is Uptick writing the price the lake then records.<br><br>' +
+    '<b>Comp (cmp)</b> is Uptick’s <b>Calculated Market Price</b>: its live estimate of what the seat is worth, computed <b>ignoring</b> the floor and ceiling. ' +
+    '<b>Floor</b> and <b>ceiling</b> are the bounds configured for the listing; a ceiling of 0 means none is set, so it shows as a dash. ' +
+    'Push is the comp clamped into those bounds, which is what makes the columns worth reading together: <b>floor binding</b> means the comp is <em>below</em> the floor, so Uptick wanted to go lower and the floor stopped it — e.g. section 101 row T, comp $196.83 against a floor of $210.00, pushed at $210.00 and displayed on B2B at $225.16 once the markup is added. ' +
+    '<b>at floor</b> is the milder case: sitting on the floor with the comp at or above it. The markup lives outside Uptick entirely, so a B2B price above the floor is the marketplace’s doing, not the autopricer’s. ' +
+    '<b>Pricing rows</b> is a guard, normally empty: the pricing table’s grain is (listing_id, account_id) with a component type, so a listing carrying more than one row is flagged rather than silently duplicated.<br><br>' +
     'Every listing from any source appears, matched on <b>section + row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
     'That is why there are two quantity columns, with the B2B one flagged when it differs. ' +
     'The <b>In</b> badges say which systems carry the listing — a source with no badge does not have it, which is a different question from whether the prices or quantities agree. ' +

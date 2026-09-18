@@ -402,3 +402,59 @@ Two things to get right when computing these yourself:
 The Datalake MCP spills a large answer to a file and returns the path instead of
 the rows. Keep queries narrow (one game, one section, a `LIMIT`) and treat a
 payload that is not JSON as "too large", not as data.
+
+## 16. The four listing prices, and what Uptick's bounds mean
+
+One ticket, four prices, cheapest first — each from a different place in the
+chain, so they are not versions of one number:
+
+| column | source | what it is |
+|---|---|---|
+| Uptick push | `mcp_uptick_pricing.push_price` | what the autopricer decided, **after** clamping to floor/ceiling |
+| Lake list | `mcp_lysted_listings.price` | what the lake records the broker listing at |
+| B2B shows | `search_listings` ÷ 1.03 | the figure on the B2B screen |
+| B2B connector | `search_listings.price` | what the API returns, 3% above the screen |
+
+Push and lake list agree wherever the autopricer is driving the listing — that
+is Uptick writing the price the lake then records. The step from lake list to
+B2B is the marketplace's per-listing markup (§14), which happens **outside
+Uptick**: a B2B price above the floor is the marketplace's doing, not the
+autopricer's.
+
+### `cmp`, floor and ceiling
+
+Per the columns' own documentation:
+
+- **`cmp`** is the **Calculated Market Price** — Uptick's live estimate of what
+  the seat is worth, computed **ignoring** the floor and ceiling.
+- **`floor`** / **`ceiling`** are the bounds configured for the listing.
+  A ceiling of **0 means unset**, so treat it as null rather than as $0.
+- **`push_price`** is `cmp` clamped into those bounds.
+
+That makes two states worth separating, which a plain "is push at the floor"
+test conflates:
+
+| state | reading |
+|---|---|
+| push > floor | the autopricer is free; push tracks `cmp` |
+| push == floor **and** `cmp` < floor | **the floor is binding** — Uptick wanted to go lower and was stopped |
+| push == floor and `cmp` >= floor | it merely sits on the floor |
+
+Worked example, section 101 row T on 2026-10-28: `cmp` **$196.83**, floor
+**$210.00**, push **$210.00**, displayed on B2B at **$225.16**. The floor held
+it $13 above Uptick's own market estimate, and the marketplace markup then put
+the visible price $28 above that. Section 124 row K is the extreme version:
+floor **$1,625.48** against a `cmp` of **$246.33**.
+
+### Guard the pricing join
+
+`mcp_uptick_pricing`'s grain is **`(listing_id, account_id)`** with a
+`component_type_id`, and its docs say `listing_id` is not unique on its own. It
+is 1:1 for the games checked (84 of 84 listings with exactly one row), but a
+group or split pricing component would fan a listing table out silently.
+Collapse it per listing — `argMax(..., calculated_at)` — and carry `count()`
+through so a fan-out is visible instead of duplicating rows.
+
+`calculated_at` also moves during the day (13:00 and 16:00 UTC observed on the
+same date), so it is not strictly a once-daily dump; it is still a snapshot, and
+every row in one pull shares its timestamp.
