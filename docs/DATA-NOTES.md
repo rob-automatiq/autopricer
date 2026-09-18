@@ -327,8 +327,34 @@ or the consignment marketplace: all 82 null-`type` rows are `Sync:` accounts,
 and every `Uptick:` account row has a value. Those rows have no B2B side
 either. The account prefix is the thing to read.
 
-`anchor` does carry signal — `Other` 481, null 82, `Automatiq Feed` 45 — and
-`last_touched_email` is populated on 106 of 608.
+### What `type` actually means
+
+Per the column's own documentation, it is **who set the price** — four
+different things, not degrees of one:
+
+| value | meaning | sales |
+|---|---|---|
+| `License` | priced by **Uptick**, the auto-pricing product | 11 |
+| `Full Service` | priced by **Automatiq's Full Service Pricing team** — a person at Automatiq, not the engine | 95 |
+| `Manual` | the broker set the price themselves, no Uptick involvement | 419 |
+| null | a `Sync:` sale; Sync delivers tickets and does not price them, so there is no attribution | 82 |
+
+`type` is constant within an account except on **`Uptick:2203`** — the umbrella
+account Lysted sub-broker sales roll up to — which carries all three. Every
+other account has exactly one value, so a mixed account is a roll-up, not dirty
+data.
+
+### `anchor` only means something on Uptick-priced sales
+
+The column documents itself as the competitor feed Uptick priced against, and
+"only relevant for Uptick-priced sales". The data agrees, emphatically: on
+`Manual` sales it is `Other` on **all 420**. It varies only on the two
+Uptick-priced types (`Full Service`: 56 `Other` / 39 `Automatiq Feed`;
+`License`: 5 / 6). Show it for those two and leave it blank elsewhere, or it is
+a column of one repeated word.
+
+`last_touched_email` is populated on 106 of 608 — sparse but real when present,
+and null on every `Sync:` row.
 
 ## 15. B2B's event list disagrees with B2B's own listing view
 

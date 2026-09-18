@@ -262,6 +262,9 @@
   .b-warn   { background: var(--lake-soft);   color: var(--lake); }
   .b-blue   { background: var(--pos-soft);    color: var(--pos); }
   .b-bad    { background: var(--bad-soft);    color: var(--bad); }
+  /* Full-contrast outline, for a value that is a real category but carries no
+     warning or provenance. Not the old grey: the text is body ink. */
+  .b-plain  { color: var(--ink); border-color: var(--line-strong); }
 
   /* ---------------------------------------------------------- notes */
   .note {
@@ -693,6 +696,10 @@ LIMIT 300`;
 /* ------------------------------------------------------------ rendering */
 function setState(hostId, kind, a, b) {
   const host = $(hostId);
+  // Survive a node that no longer exists: two calls to a removed card's
+  // body threw here and aborted the function that was filling the rest of
+  // the panel, so a section with no B2B inventory lost its totals too.
+  if (!host) return;
   host.textContent = '';
   if (kind === 'load') {
     const d = el('div', { className: 'body' });
@@ -1013,16 +1020,19 @@ async function loadSales(g, sec, ok, bag) {
         ? null : (Number(r.commission_rate) * 100).toFixed(1) + '%'), 'num'],
       ['B2B revenue', (r) => money(r.b2b_revenue), 'num'],
       ['Marketplace', (r) => r.marketplace, null],
-      // Type already carries "was Uptick pricing this": across every home game
-      // it maps one-to-one onto if_brokergenius -- Manual false (419), Full
-      // Service true (95), License true (11), null null (82). So the separate
-      // Uptick-priced column was the same fact twice, and is gone. The two
-      // Uptick-priced types get the badge; Manual is the quiet case.
+      /* How the ticket was priced. Every present value is a badge, so the
+         column reads as one kind of thing; the hue says who set the price.
+         Uptick-priced blue: `license` is Uptick's auto-pricing, `full service`
+         is Automatiq's FSP team. `manual` is the broker pricing without
+         Uptick, so it is a category rather than a product -- outlined. Empty
+         means the sale came through a Sync: account and has no Uptick
+         attribution at all. Type also restates if_brokergenius exactly, which
+         is why that column is gone. */
       ['Type', (r) => {
         const t = String(r.sale_type || '');
         if (!t) return null;
-        return (t === 'Full Service' || t === 'License')
-          ? badge(t.toLowerCase(), 'uptick') : t.toLowerCase();
+        return badge(t.toLowerCase(),
+          (t === 'Full Service' || t === 'License') ? 'uptick' : 'plain');
       }, null],
       ['Fulfilment', (r) => {
         const f = String(r.b2b_fulfilment || '').toUpperCase();
@@ -1038,10 +1048,15 @@ async function loadSales(g, sec, ok, bag) {
       // Processor is dropped: SeatScouts on 596 of 608 sales, "Other" on 10,
       // null on 2 -- a column that is the same word every time.
       ['Tags', (r) => r.tags, null],
-      ['Anchor', (r) => {
+      // The market feed Uptick priced against -- only meaningful when Uptick
+      // did the pricing. On Manual sales it is 'Other' on every one of the 420,
+      // so showing it there would be a column of noise.
+      ['Priced against', (r) => {
+        const t = String(r.sale_type || '');
+        if (t !== 'Full Service' && t !== 'License') return null;
         const a = String(r.anchor || '');
         if (!a) return null;
-        return a === 'Automatiq Feed' ? badge('automatiq feed', 'uptick') : a.toLowerCase();
+        return a === 'Other' ? badge('other', 'plain') : badge(a.toLowerCase(), 'uptick');
       }, null],
       ['Event row', (r) => r.event_row, 'id'],
       ['POS sale id', (r) => r.sale_id, 'id'],
@@ -1054,8 +1069,15 @@ async function loadSales(g, sec, ok, bag) {
       'The two OST figures agree; <b>the two gross figures often do not</b> — on one game, 4 of the 8 matched sales differed by about 1%, so at least one is derived rather than recorded. The <b>In</b> badges flag it per row. ' +
       'To look a sale up: in <b>B2B</b>, search the <b>marketplace ref</b> or the numeric <b>B2B sale id</b> / <b>line id</b>. In <b>Uptick</b> there is no invoice number — <code>mcp_sales.id</code> is an internal hash — so match on <b>account + event row + section/row + invoiced timestamp + marketplace + qty</b>. ' +
       'A dash means that system never sent the figure; it is not a zero. ' +
-      '<b>Whole rows of dashes are not missing data either.</b> Every sale booked against a <code>Sync:</code> account — 82 of these games’ sales — has no <b>type</b>, no <b>Uptick</b> pricing flag and no B2B side, because it did not go through Uptick or the consignment marketplace at all. ' +
-      'The <b>Account</b> column is what tells you which: <code>Uptick:</code> or <code>Sync:</code>.');
+      '<b>Whole rows of dashes are not missing data either.</b> Every sale booked against a <code>Sync:</code> account — 82 of these games’ sales — has no <b>type</b> and no B2B side, because it did not go through Uptick or the consignment marketplace at all. ' +
+      'The <b>Account</b> column is what tells you which: <code>Uptick:</code> or <code>Sync:</code>.<br><br>' +
+      '<b>Type</b> is who set the price, and the four values are not degrees of the same thing: ' +
+      '<b>license</b> — priced by Uptick, the auto-pricing product (11); ' +
+      '<b>full service</b> — priced by Automatiq’s Full Service Pricing team, so a person at Automatiq rather than the engine (95); ' +
+      '<b>manual</b> — the broker set the price themselves, with no Uptick involvement (419); ' +
+      'and <b>empty</b> — a <code>Sync:</code> sale, which carries no pricing attribution because Sync delivers tickets and does not price them (82). ' +
+      'Type is constant within an account except on <code>Uptick:2203</code>, the umbrella account that Lysted sub-broker sales roll up to, which carries all three. ' +
+      '<b>Priced against</b> is the competitor feed Uptick used, and it only means anything on the two Uptick-priced types — on manual sales it is <code>Other</code> on all 420, so it is left blank there.');
     renderRecon(bag);
   } catch (e) {
     if (!ok()) return;
@@ -1071,7 +1093,6 @@ async function loadBoard(g, sec, ok, bag) {
   } catch (e) {
     if (!ok()) return;
     setState('#b2bbody', 'err', explain(e));
-    setState('#upbody', 'err', explain(e));
     return;
   }
   if (!ok()) return;
@@ -1198,7 +1219,6 @@ async function loadBoard(g, sec, ok, bag) {
 
   if (!lake.length && !liveHere.length) {
     setState('#b2bbody', 'empty', 'No B2B inventory in ' + scopeLabel() + ' for this game.');
-    setState('#upbody', 'empty', 'No listings to price in ' + scopeLabel() + '.');
     renderRecon(bag);
     return;
   }
