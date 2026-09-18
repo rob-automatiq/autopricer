@@ -217,6 +217,40 @@ $131.02 OST** per `mcp_sales` → **$127.25 gross / $131.02 OST** per
 `mcp_lysted_sales`. The live board still shows a 10-seat row Q listing at
 $124.95, with Uptick's push price $124.95, comp $99.99, floor $119, ceiling $895.
 
+## 14. One B2B listing has three prices, and none of them is "the" price
+
+For the 2026-10-28 Golden State game, two listings read straight off the B2B
+screen against both data paths:
+
+| listing | B2B screen | `mcp_lysted_listings.price` | `search_listings` |
+|---|---|---|---|
+| 138 row K ×2 | **$273.41** | $265.00 | $281.62 |
+| 138 row 3 ×3 | **$900.65** | $850.00 | $927.67 |
+
+Two relationships, only one of which is derivable:
+
+- **Connector = screen × 1.03, exactly.** Inverting it reproduces the screen
+  figure to the cent on both cases, with the division floored:
+  `floor(28162 / 1.03) = 27341` → $273.41, and
+  `floor(92767 / 1.03) = 90065` → $900.65. Use the connector price ÷ 1.03 when
+  you need the number a person is looking at.
+- **Screen ÷ lake price is a per-listing markup** — 3.2% on one of those rows
+  and 6.0% on the other, 4.7% on section 101's rows. It is not a constant and
+  it is **not derivable** from the lake:
+  `mcp_sync_markups_and_exchange_fees` carries only `median_markup` and
+  `median_exchange_fee` per (sync_id, exchange) and is mostly NULL. So show the
+  markup, do not try to compute the screen figure from the lake.
+
+The lake price is the broker's own list price, and it equals
+`mcp_uptick_pricing.push_price` wherever the autopricer is driving the listing —
+which is the useful thing about it, and a reason to keep it on screen rather
+than hide it behind the marketplace figure.
+
+**Counts disagree too.** The B2B screen reports **112 listings** for that game;
+`mcp_lysted_listings` holds **106** (98 `ACTIVE`/`READY`, 8 `SOLD`, 0 deleted)
+across 46 sections; `search_listings` returns about 110. Show all three counts
+rather than picking one.
+
 ## Result-size limit
 
 The Datalake MCP spills a large answer to a file and returns the path instead of

@@ -265,7 +265,7 @@
     </div>
     <div class="fld">
       <label for="sec">Section</label>
-      <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="209">
+      <input id="sec" type="text" inputmode="text" autocomplete="off" placeholder="all">
     </div>
     <div class="fld">
       <label for="refresh">&nbsp;</label>
@@ -319,7 +319,7 @@
       <section class="card src-b2b" id="b2bcard">
         <header>
           <span class="tag b2b">B2B</span>
-          <h2>Consignment board, now</h2>
+          <h2>Listings</h2>
           <span class="sub" id="b2bsub">Live marketplace vs. the lake&rsquo;s copy</span>
           <span class="stamp" id="b2bstamp"></span>
         </header>
@@ -329,7 +329,7 @@
       <section class="card src-b2b" id="b2bsoldcard">
         <header>
           <span class="tag b2b">B2B</span>
-          <h2>Consignment sold</h2>
+          <h2>Sold</h2>
           <span class="sub" id="b2bsoldsub"></span>
           <span class="stamp" id="b2bsoldstamp"></span>
         </header>
@@ -525,6 +525,11 @@ GROUP BY section`;
    IN(subquery) set -- NOT_FOUND_COLUMN_IN_BLOCK on `deleted_at.null`. The
    column is selected as text instead and the check happens in the page. */
 
+/* `sec` may be null, which means every section of the game. The section box is
+   a filter, and an empty filter is a legitimate scope -- making it mandatory
+   put a game's whole board out of reach. */
+const secClause = (col, sec) => (sec ? `\n  AND ${col} = ${sqlStr(sec)}` : '');
+
 const sqlSales = (b2b, sec) => `
 SELECT e.pos                                              AS pos,
        e.id                                               AS event_row,
@@ -547,10 +552,9 @@ SELECT e.pos                                              AS pos,
        s.last_touched_email                               AS last_touched
 FROM mcp_sales s
 INNER JOIN mcp_events e ON s.event_id = e.id
-WHERE e.b2bexchangeeventid = ${sqlStr(b2b)}
-  AND s.section = ${sqlStr(sec)}
+WHERE e.b2bexchangeeventid = ${sqlStr(b2b)}${secClause('s.section', sec)}
 ORDER BY s.invoice_date_time_utc DESC
-LIMIT 150`;
+LIMIT 400`;
 
 const sqlB2bBoard = (b2b, sec) => `
 SELECT l.id                          AS listing_id,
@@ -575,10 +579,9 @@ SELECT l.id                          AS listing_id,
        toString(u.calculated_at)     AS priced_at
 FROM mcp_lysted_listings l
 LEFT JOIN mcp_uptick_pricing u ON u.listing_id = l.id
-WHERE l.event_id_with_pos IN ${evScope(b2b)}
-  AND l.section = ${sqlStr(sec)}
-ORDER BY l.price
-LIMIT 150`;
+WHERE l.event_id_with_pos IN ${evScope(b2b)}${secClause('l.section', sec)}
+ORDER BY l.section, l.price
+LIMIT 400`;
 
 const sqlB2bSold = (b2b, sec) => `
 SELECT ls.sale_id                       AS sale_id,
@@ -602,10 +605,9 @@ SELECT ls.sale_id                       AS sale_id,
        ls.fulfillmentstatus             AS fulfillment,
        toString(ls.invoice_date)        AS invoice_date
 FROM mcp_lysted_sales ls
-WHERE ls.event_id_with_pos IN ${evScope(b2b)}
-  AND ls.section = ${sqlStr(sec)}
+WHERE ls.event_id_with_pos IN ${evScope(b2b)}${secClause('ls.section', sec)}
 ORDER BY ls.invoice_date DESC
-LIMIT 150`;
+LIMIT 400`;
 
 /* Retail board. Every numeric column in the prism tables is a String, and the
    table keeps one snapshot per processed_date, so the newest partition is the
@@ -631,13 +633,13 @@ SELECT p.inventory_id                                  AS inventory_id,
 FROM mcp_prism_vividseats_event_listings p
 WHERE p.event_id = ${sqlStr(vsId)}
   AND p.processed_date = (SELECT d FROM latest)
-  AND p.is_active
+  AND p.is_active${sec ? `
   AND replaceRegexpOne(
         replaceRegexpOne(ifNull(p.section, ''),
           '(?i)^(lower|upper|club|suite|main|balcony|mezzanine)[ ]+(level|lvl)[ ]+', ''),
-        '^0+', '') = ${sqlStr(sec)}
+        '^0+', '') = ${sqlStr(sec)}` : ''}
 ORDER BY all_in_per_ticket
-LIMIT 150`;
+LIMIT 300`;
 
 /* ------------------------------------------------------------ rendering */
 function setState(hostId, kind, a, b) {
@@ -664,6 +666,12 @@ function setState(hostId, kind, a, b) {
     }
     host.append(d);
   }
+}
+
+/** A leading Section column, only when the scope is the whole game. */
+function secCol(pick) {
+  if (state.section) return [];
+  return [['Section', pick || ((r) => secKey(r.section) || r.section), 'em']];
 }
 
 /**
@@ -757,11 +765,14 @@ function drawMap() {
 }
 
 /* --------------------------------------------------------------- flow */
+/** Select a section, or clear back to the whole game by picking it again. */
 function pick(sec) {
-  state.section = sec;
-  $('#sec').value = sec;
+  state.section = (sec && sec !== state.section) ? sec : null;
+  $('#sec').value = state.section || '';
   drawMap();
-  $('#mapsub').textContent = 'Section ' + sec;
+  $('#mapsub').textContent = state.section
+    ? 'Section ' + state.section + ' — click again for all'
+    : (state.activity.size ? state.activity.size + ' sections with activity' : 'Pick a section');
   loadSection();
 }
 
@@ -824,15 +835,15 @@ async function loadActivity() {
       b.addEventListener('click', () => pick(k));
       oddHost.append(b);
     });
-    // Open on the busiest section so the page shows real work, not an empty shell.
-    if (!state.section || !map.has(state.section)) {
-      let best = null, bestN = -1;
-      map.forEach((v, k) => {
-        const n = v.sales * 2 + v.b2b;
-        if (n > bestN) { bestN = n; best = k; }
-      });
-      if (best) { state.section = best; $('#sec').value = best; $('#mapsub').textContent = 'Section ' + best; }
+    // Open on the WHOLE GAME, not a section. Landing on one section made a
+    // game's entire board unreachable -- a quiet section read as "no listings".
+    if (state.section && !map.has(state.section)) {
+      state.section = null;
+      $('#sec').value = '';
     }
+    $('#mapsub').textContent = state.section
+      ? 'Section ' + state.section + ' — click again for all'
+      : map.size + ' sections with activity';
     drawMap();
     loadSection();
   } catch (e) {
@@ -855,12 +866,17 @@ async function loadActivity() {
   }
 }
 
+function scopeLabel() {
+  return state.section ? 'section ' + state.section : 'all sections';
+}
+
 function loadSection() {
   const g = state.game, sec = state.section;
-  if (!g || !sec) return;
+  if (!g) return;
   const mine = ++state.seq;
   const ok = () => mine === state.seq;
-  $('#recontitle').textContent = 'Section ' + sec + ' · ' + (g.event_date || '');
+  $('#recontitle').textContent = (sec ? 'Section ' + sec : 'Whole game')
+    + ' · ' + (g.event_date || '');
   ['#salesbody', '#b2bbody', '#b2bsoldbody', '#upbody', '#retailbody'].forEach((h) => setState(h, 'load'));
   $('#recon').textContent = '';
   $('#reconnote').textContent = '';
@@ -884,15 +900,17 @@ async function loadSales(g, sec, ok, bag) {
     const tickets = rows.reduce((a, r) => a + (Number(r.qty) || 0), 0);
     $('#salessub').textContent = rows.length
       ? rows.length + ' sales · ' + tickets + ' tickets · ' +
-        Object.keys(byPos).sort().map((p) => p + ' ' + byPos[p]).join(', ')
+        Object.keys(byPos).sort().map((p) => p + ' ' + byPos[p]).join(', ') +
+        ' · ' + scopeLabel()
       : '';
     if (!rows.length) {
-      setState('#salesbody', 'empty', 'Nothing sold in section ' + sec + ' for this game.');
+      setState('#salesbody', 'empty', 'Nothing sold in ' + scopeLabel() + ' for this game.');
       renderRecon(bag);
       return;
     }
     table('#salesbody', rows, [
       ['Invoiced', (r) => (r.invoice_utc || '').slice(0, 16).replace('T', ' '), 'id'],
+      ...secCol(),
       ['POS', (r) => r.pos, null],
       ['Row', (r) => r.row, 'em'],
       ['Qty', (r) => num(r.qty), 'num'],
@@ -938,7 +956,7 @@ async function loadBoard(g, sec, ok, bag) {
   if (!ok()) return;
 
   stamp($('#b2bstamp'), lakeRes);
-  const liveHere = (live || []).filter((l) => secKey(l.section) === sec);
+  const liveHere = sec ? (live || []).filter((l) => secKey(l.section) === sec) : (live || []);
   bag.board = lake; bag.live = liveHere;
   // A listing is on sale only if it is broadcastable AND not soft-deleted. The
   // delete check is done here because ClickHouse cannot do it in the query.
@@ -965,10 +983,11 @@ async function loadBoard(g, sec, ok, bag) {
     .map((l) => ({
       market_only: true,
       listing_id: l.id,
+      section: secKey(l.section),
       row: l.row,
       quantity: l.quantity,
       price: null,
-      market_price: Number(l.price) / 100,
+      market_cents: Number(l.price),
       seats: l.seats,
       stock_type: l.stock_type,
       in_hand_date: l.in_hand_date,
@@ -977,44 +996,74 @@ async function loadBoard(g, sec, ok, bag) {
       push_price: null, cmp: null, floor_px: null, ceiling_px: null,
     }));
   const rows = lake.concat(marketOnly);
-  const marketPrice = (r) => {
-    if (r.market_only) return r.market_price;
+  const marketCents = (r) => {
+    if (r.market_only) return r.market_cents;
     const m = liveBy.get(key(r.row, r.quantity));
-    return m ? Number(m.price) / 100 : null;
+    return m ? Number(m.price) : null;
+  };
+  const marketPrice = (r) => {
+    const c = marketCents(r);
+    return c === null ? null : c / 100;
+  };
+  /**
+   * The figure the B2B screen itself shows.
+   *
+   * Three prices exist for one listing: the broker's list price in the lake,
+   * what B2B displays, and what the connector returns. The connector runs
+   * exactly 3% above the displayed figure -- checked against two listings read
+   * off the B2B screen, 28162c -> $273.41 and 92767c -> $900.65, both exact to
+   * the cent when the division is floored. The lake-to-displayed step is a
+   * per-listing markup that is NOT derivable (mcp_sync_markups_and_exchange_fees
+   * holds company-level medians and is mostly null), which is why the lake
+   * price is shown beside this rather than adjusted into it.
+   */
+  const b2bShows = (r) => {
+    const c = marketCents(r);
+    return c === null ? null : Math.floor(c / 1.03) / 100;
   };
 
-  $('#b2bsub').textContent = activeLake.length + ' live in the lake · ' +
-    (liveErr ? 'marketplace unavailable' : liveHere.length + ' on the marketplace');
+  // The three counts that should agree and do not. Showing them is the point:
+  // the B2B screen's own total is a fourth number, so a gap here is the first
+  // thing to look at rather than something to discover later.
+  $('#b2bsub').textContent =
+    (liveErr ? 'marketplace unavailable' : liveHere.length + ' on the marketplace')
+    + ' · ' + activeLake.length + ' on sale in the lake'
+    + ' · ' + lake.length + ' lake rows incl. sold'
+    + ' · ' + scopeLabel();
 
   if (!lake.length && !liveHere.length) {
-    setState('#b2bbody', 'empty', 'No consignment inventory in section ' + sec + ' for this game.');
-    setState('#upbody', 'empty', 'No listings to price in section ' + sec + '.');
+    setState('#b2bbody', 'empty', 'No B2B inventory in ' + scopeLabel() + ' for this game.');
+    setState('#upbody', 'empty', 'No listings to price in ' + scopeLabel() + '.');
     renderRecon(bag);
     return;
   }
 
   table('#b2bbody', rows, [
+    ...secCol(),
     ['Row', (r) => r.row, 'em'],
     ['Qty', (r) => num(r.quantity), 'num'],
-    ['Lake price', (r) => money(r.price), 'num'],
-    ['Marketplace price', (r) => money(marketPrice(r)), 'num'],
-    ['Agree', (r) => {
-      if (r.market_only) {
-        return el('span', { className: 'flag', textContent: 'not in lake' });
+    ['B2B shows', (r) => money(b2bShows(r)), 'num'],
+    ['Marketplace', (r) => money(marketPrice(r)), 'num'],
+    ['Lake list price', (r) => money(r.price), 'num'],
+    // Presence, not price. The marketplace figure sits above the lake's list
+    // price by a per-listing markup, so a price-equality test would flag every
+    // healthy row as a mismatch. The markup itself gets its own column.
+    ['Seen in', (r) => {
+      if (r.market_only) return el('span', { className: 'flag', textContent: 'not in lake' });
+      if (marketPrice(r) !== null) return el('span', { className: 'flag ok', textContent: 'both' });
+      if (String(r.deleted_at || '').trim()) {
+        return el('span', { className: 'miss', textContent: 'lake only — deleted' });
       }
-      const mp = marketPrice(r);
-      if (mp === null) {
-        if (String(r.deleted_at || '').trim()) {
-          return el('span', { className: 'miss', textContent: 'n/a — deleted' });
-        }
-        if (!onSale(r)) return el('span', { className: 'miss', textContent: 'n/a — ' + (r.status || '?').toLowerCase() });
-        return el('span', { className: 'flag', textContent: 'not on marketplace' });
+      if (!onSale(r)) {
+        return el('span', { className: 'miss', textContent: 'lake only — ' + (r.status || '?').toLowerCase() });
       }
-      const d = mp - Number(r.price);
-      return Math.abs(d) < 0.01
-        ? el('span', { className: 'flag ok', textContent: 'match' })
-        : el('span', { className: 'flag', textContent: (d > 0 ? '+' : '') + d.toFixed(2) });
+      return el('span', { className: 'flag', textContent: 'not on marketplace' });
     }, null],
+    ['Markup', (r) => {
+      const shown = b2bShows(r), list = Number(r.price);
+      if (shown === null || !Number.isFinite(list) || list <= 0) return null;
+      return '+' + ((shown / list - 1) * 100).toFixed(1) + '%';
+    }, 'num'],
     ['Status', (r) => {
       if (r.market_only) return el('span', { className: 'flag', textContent: 'marketplace only' });
       return String(r.deleted_at || '').trim()
@@ -1038,16 +1087,23 @@ async function loadBoard(g, sec, ok, bag) {
     ['Org', (r) => r.org_id, 'id'],
   ], (liveErr
       ? '<b>' + esc(explain(liveErr).h) + '.</b> ' + esc(explain(liveErr).p) + ' The lake column still reads live. '
-      : 'Two independent paths to the same board: <b>lake price</b> from <code>mcp_lysted_listings</code> (dollars) and <b>marketplace price</b> from the B2B connector (cents, converted). ') +
-    'Every row from either source appears, matched on row + quantity. <b>not in lake</b> means the marketplace is showing a listing the lake has not caught up on; ' +
-    '<b>not on marketplace</b> is the reverse. Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
+      : '') +
+    '<b>One listing has three prices.</b> <b>B2B shows</b> is the figure on the B2B screen, derived as the connector price ÷ 1.03 — checked against two listings read off that screen and exact to the cent both times. ' +
+    '<b>Marketplace</b> is what the connector returns (cents, converted), which runs exactly 3% above the displayed figure. ' +
+    '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
+    '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
+    'Every row from either source appears, matched on row + quantity: <b>not in lake</b> means the marketplace is showing something the lake has not caught up on, <b>not on marketplace</b> is the reverse. ' +
+    'Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
 
   const priced = lake.filter((r) => r.push_price !== null && r.push_price !== undefined);
-  $('#upsub').textContent = priced.length + ' of ' + lake.length + ' listings carry Uptick pricing';
+  $('#upsub').textContent = priced.length + ' of ' + lake.length
+    + ' listings carry Uptick pricing · ' + scopeLabel();
   if (!priced.length) {
-    setState('#upbody', 'empty', 'None of section ' + sec + '’s listings are priced by Uptick.');
+    setState('#upbody', 'empty',
+      'No listings in ' + scopeLabel() + ' are priced by Uptick.');
   } else {
     table('#upbody', priced, [
+      ...secCol(),
       ['Row', (r) => r.row, 'em'],
       ['Qty', (r) => num(r.quantity), 'num'],
       ['Listed at', (r) => money(r.price), 'num'],
@@ -1071,14 +1127,16 @@ async function loadSold(g, sec, ok, bag) {
     if (!ok()) return;
     stamp($('#b2bsoldstamp'), res);
     bag.sold = rows;
-    $('#b2bsoldsub').textContent = rows.length ? rows.length + ' consignment sales' : '';
+    $('#b2bsoldsub').textContent = rows.length
+      ? rows.length + ' B2B sales · ' + scopeLabel() : '';
     if (!rows.length) {
-      setState('#b2bsoldbody', 'empty', 'No consignment sales in section ' + sec + ' for this game.');
+      setState('#b2bsoldbody', 'empty', 'No B2B sales in ' + scopeLabel() + ' for this game.');
       renderRecon(bag);
       return;
     }
     table('#b2bsoldbody', rows, [
       ['Invoiced', (r) => r.invoice_date, 'id'],
+      ...secCol(),
       ['Row', (r) => r.row, 'em'],
       ['Qty', (r) => num(r.qty), 'num'],
       ['Gross / tkt', (r) => money(per(r.gross_total, r.qty)), 'num'],
@@ -1117,14 +1175,16 @@ async function loadRetail(g, sec, ok, bag) {
     bag.retail = rows;
     const d = rows.length ? rows[0].processed_date : null;
     $('#retailsub').textContent = rows.length
-      ? rows.length + ' asks · snapshot ' + d
+      ? rows.length + ' asks · snapshot ' + d + ' · ' + scopeLabel()
       : 'The public ask board, for context';
     if (!rows.length) {
-      setState('#retailbody', 'empty', 'Section ' + sec + ' has no active VividSeats asks in the newest snapshot.');
+      setState('#retailbody', 'empty',
+        'No active VividSeats asks in ' + scopeLabel() + ' in the newest snapshot.');
       renderRecon(bag);
       return;
     }
     table('#retailbody', rows, [
+      ...secCol(),
       ['Row', (r) => r.row, 'em'],
       ['Qty', (r) => num(r.quantity), 'num'],
       ['Ask', (r) => money(r.price), 'num'],
@@ -1215,7 +1275,9 @@ function bindUI() {
   const secIn = $('#sec');
   const commit = () => {
     const k = secKey(secIn.value);
-    if (k) pick(k); else secIn.value = state.section || '';
+    // An empty box is a valid scope: the whole game.
+    if (!k) { state.section = null; pick(null); return; }
+    if (k !== state.section) pick(k); else secIn.value = k;
   };
   secIn.addEventListener('change', commit);
   secIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
