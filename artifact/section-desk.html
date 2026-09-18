@@ -653,7 +653,9 @@ SELECT l.id                          AS listing_id,
        u.floor_px                    AS floor_px,
        u.ceiling_px                  AS ceiling_px,
        u.priced_at                   AS priced_at,
-       u.pricing_rows                AS pricing_rows
+       u.pricing_rows                AS pricing_rows,
+       sy.sync_qty                   AS sync_qty,
+       sy.sync_shown                 AS sync_shown
 FROM mcp_lysted_listings l
 /* The pricing table's grain is (listing_id, account_id) with a
    component_type_id, so its own docs warn listing_id is not unique. It happens
@@ -674,6 +676,24 @@ LEFT JOIN (
   )
   GROUP BY listing_id
 ) u ON u.listing_id = l.id
+/* The Uptick-side quantity. mcp_uptick_pricing itself has NO quantity column --
+   it holds prices only -- so the quantity Uptick prices against is the one on
+   the Sync listing it reads, joined on inventory_id. Two figures come back and
+   they mean different things: quantity is what the listing holds (identical to
+   the lake's on 2,548 of 2,548 season rows, so it is a confirmation, not a
+   discrepancy) and shown_quantity is what is displayed publicly, which is
+   where the lake-vs-B2B quantity gap actually comes from. Grouped because the
+   table's dedup grain is inventory_id and a second row would fan the board out. */
+LEFT JOIN (
+  SELECT toString(inventory_id) AS inv,
+         any(quantity)          AS sync_qty,
+         any(shown_quantity)    AS sync_shown
+  FROM mcp_sync_listings
+  WHERE toString(inventory_id) IN (
+    SELECT toString(id) FROM mcp_lysted_listings WHERE event_id_with_pos IN ${evScope(b2b)}
+  )
+  GROUP BY inventory_id
+) sy ON sy.inv = toString(l.id)
 WHERE l.event_id_with_pos IN ${evScope(b2b)}${secClause('l.section', sec)}
 ORDER BY l.section, l.price
 LIMIT 400`;
@@ -1190,6 +1210,7 @@ async function loadBoard(g, sec, ok, bag) {
       status: null, broadcast: null, autopricing: null,
       total_cost: null, deleted_at: '', updated_at: null, org_id: null,
       push_price: null, cmp: null, floor_px: null, ceiling_px: null,
+      sync_qty: null, sync_shown: null,
     }));
   const rows = lake.concat(marketOnlyRows);
   const marketCents = (r) => {
@@ -1253,16 +1274,45 @@ async function loadBoard(g, sec, ok, bag) {
       const m = matchOf.get(r);
       return m ? m.seats : null;
     }, 'id'],
-    // Two quantity columns on purpose: the systems disagree about how many
+    // Three quantity columns on purpose: the systems disagree about how many
     // tickets a listing holds, and one merged column would have to pick a side.
-    ['Lake qty', (r) => (r.market_only ? null : num(r.quantity)), 'num'],
+    // B2B leads because it is the number the marketplace is actually showing
+    // buyers; the lake's is the one that deviates, so it carries the flag.
     ['B2B qty', (r) => {
       const q = marketQty(r);
-      if (q === null || q === undefined) return null;
-      const lq = r.market_only ? null : Number(r.quantity);
-      return (lq !== null && Number(q) !== lq)
-        ? el('span', { className: 'flag', textContent: num(q) })
-        : num(q);
+      return (q === null || q === undefined) ? null : num(q);
+    }, 'num'],
+    ['Lake qty', (r) => {
+      if (r.market_only) return null;
+      const lq = Number(r.quantity);
+      const q = marketQty(r);
+      if (q === null || q === undefined || Number(q) === lq) return num(lq);
+      // Flagged on the lake side, and the reason is usually a withheld display
+      // quantity rather than a sync fault -- so say which it is on hover.
+      const shown = zeroIsUnknown(r.sync_shown);
+      return el('span', {
+        className: 'flag',
+        textContent: num(lq),
+        title: shown !== null && Number(shown) === Number(q)
+          ? 'The lake holds ' + lq + ' tickets; only ' + q + ' are shown publicly, '
+            + 'so the marketplace displays ' + q + '.'
+          : 'The lake holds ' + lq + ' tickets and the marketplace shows ' + q
+            + ', with no withheld display quantity to explain the gap.',
+      });
+    }, 'num'],
+    /* Uptick prices a Sync listing, and mcp_uptick_pricing carries no quantity
+       of its own, so this is the quantity on the listing Uptick reads. It agreed
+       with the lake on every one of 2,548 season rows checked, which makes a
+       difference here worth looking at rather than routine. The `shows` badge is
+       the same listing's public display quantity, which is what B2B renders. */
+    ['Uptick qty', (r) => {
+      const q = zeroIsUnknown(r.sync_qty);
+      if (q === null) return null;
+      const shown = zeroIsUnknown(r.sync_shown);
+      if (shown === null || Number(shown) === Number(q)) return num(q);
+      const frag = document.createDocumentFragment();
+      frag.append(num(q) + ' ', badge('shows ' + num(shown), 'warn'));
+      return frag;
     }, 'num'],
     // One listing, one row, every system's price for it side by side. A 0 in
     // any price column means "not set", so it prints as a dash -- "$0.00" read
@@ -1337,7 +1387,9 @@ async function loadBoard(g, sec, ok, bag) {
     '<b>above</b>: the market is over your ceiling, so the ceiling is capping it. <b>within</b>: the autopricer is free to track the market. On the game checked, 43 below, 38 within, none above. ' +
     'The markup lives outside Uptick entirely, so a B2B price above the floor is the marketplace’s doing, not the autopricer’s.<br><br>' +
     'Every listing from any source appears, matched on <b>section + row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
-    'That is why there are two quantity columns, with the B2B one flagged when it differs. ' +
+    'That is why there are three quantity columns. <b>B2B qty</b> is what the marketplace shows buyers and leads because it is the number a buyer sees; <b>Lake qty</b> is flagged when it differs from it, because the lake is the side that deviates; ' +
+    '<b>Uptick qty</b> is the quantity on the Sync listing Uptick prices against — mcp_uptick_pricing holds prices only and has no quantity of its own. That figure matched the lake on all 2,548 season rows checked, so a difference there is worth a look rather than routine. ' +
+    'The gap itself is almost always a withheld <b>display</b> quantity, not a sync fault: section 235 row U holds 10 tickets and shows 6, and the <b>shows 6</b> badge beside Uptick qty is that public figure — it reproduced the B2B number exactly on every row checked. Hover a flagged lake quantity for the reason. ' +
     'The <b>Sources</b> badges say which systems carry the listing — a source with no badge does not have it, which is a different question from whether the prices or quantities agree. ' +
     'Only <b>active</b> and <b>ready</b> rows are on sale; <b>sold</b> and <b>deleted</b> rows are kept because they explain an empty board.' +
     (fanout ? ' <b>' + fanout + (fanout === 1 ? ' listing here carries' : ' listings here carry')

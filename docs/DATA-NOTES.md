@@ -300,9 +300,43 @@ price. Keying on row + quantity splits a listing that exists in both into
 phantom appearing — and the section then looks like it is hiding inventory.
 
 Carry both quantities through to whatever you build. There is no correct single
-number: `mcp_sync_listings` has a `shown_quantity` column alongside `quantity`,
-so a listing holding ten tickets while offering six is a normal state, not a
-fault.
+number, and the gap is now explained rather than merely suspected — see §14c.
+
+## 14c. `shown_quantity` is the B2B number, and it is the only Uptick-side one
+
+`mcp_uptick_pricing` has **no quantity column at all** — its nine columns are
+prices, bounds and timestamps. So "what quantity does Uptick see?" has to be
+answered from the Sync listing Uptick prices against, joined
+`toString(mcp_sync_listings.inventory_id) = toString(mcp_lysted_listings.id)`.
+That join is genuine: section and row agree on every matched row, and it reaches
+**2,548 of 2,921** Timberwolves lake listings.
+
+Two columns come back and only one of them carries information:
+
+| column | vs. the lake's `quantity` |
+|---|---|
+| `quantity` | identical on **2,548 of 2,548** — a confirmation, never a discrepancy |
+| `shown_quantity` | present on 964, **differs on 957, and is lower on all 957** — never higher |
+
+**`shown_quantity` is what B2B displays.** Checked against the connector for the
+2026-10-28 game:
+
+| section/row | lake `quantity` | `shown_quantity` | B2B API |
+|---|---|---|---|
+| 235 / U | 10 | **6** | `YN483L85` → **6** |
+| 215 / S | 11 | **6** | `GDLKM34R` → **6** |
+| 235 / E | 3 | null | `7472JDZ7` → **3** |
+
+So the marketplace quantity is `coalesce(shown_quantity, quantity)`. A listing
+holding ten tickets and offering six is a broker withholding display quantity —
+a normal state, not a sync fault. That distinction is the whole reason the lake
+quantity is worth flagging: a flagged row with a matching `shown_quantity` is
+explained, and one without is not.
+
+Note that `sync_qty` being always equal to the lake makes an "Uptick quantity"
+column a cross-check rather than a finder. Do not reach for
+`mcp_uptick_pricing.listing_id = mcp_sync_listings.inventory_id` expecting a
+quantity to fall out of the pricing table itself; it will not.
 
 ## 14b. Two `mcp_sales` columns carry no information
 
