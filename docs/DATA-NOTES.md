@@ -104,13 +104,14 @@ last checked.
 ## 6. Uptick's pricing state is a daily snapshot
 
 `mcp_uptick_pricing` — `push_price`, `cmp`, `floor`, `ceiling`, `group_mode`.
-1.2M rows, and **every one carries the same `calculated_at`** (13:00 UTC on the
-day checked). It is a once-a-day dump, not a live feed, so a listing repriced
-after the dump will disagree with it — that gap is information, not an error.
+1.2M rows, and **every one carries the same `calculated_at`**. It is a snapshot,
+not a live feed, so a listing repriced since the pull will disagree with it —
+that gap is information, not an error. It is **not** once a day: 13:00 and
+16:00 UTC were both observed on 2026-09-18.
 
 The join is `mcp_uptick_pricing.listing_id = mcp_lysted_listings.id` (84 of 106
 matched on a sample game). It does **not** join to
-`mcp_sync_listings.inventory_id`.
+`mcp_sync_listings.inventory_id`. Guard it against fan-out — see §16.
 
 ## 7. Section labels differ by source
 
