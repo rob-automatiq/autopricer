@@ -418,6 +418,21 @@ const inScope = (k) => !hasScope() || state.sections.indexOf(k) !== -1;
 const badge = (text, kind) =>
   el('span', { className: 'badge b-' + kind, textContent: text });
 
+/**
+ * Every boolean cell renders through here: green for true, red for false, and a
+ * dash when the system did not say. One place to decide it, because three
+ * columns each deciding separately is how the board ended up showing broadcast
+ * as green/red, autopricing as blue with a bare-text "off", and consigned as
+ * green with a bare-text "no" -- three vocabularies for one kind of fact.
+ *
+ * The words follow the column's question (a switch is on/off, a property is
+ * yes/no). The colours never vary: affirmative reads green, negative reads red.
+ */
+const bool = (v, yes, no) =>
+  v === true ? badge(yes || 'on', 'ok')
+    : v === false ? badge(no || 'off', 'bad')
+      : null;
+
 /** Several badges in one cell. Entries are [text, kind]; falsy ones are skipped. */
 function badges(list) {
   const items = list.filter(Boolean);
@@ -1079,8 +1094,7 @@ async function loadSales(g, sec, ok, bag) {
           f === 'COMPLETE' ? 'ok' : f === 'PENDING' ? 'warn' : 'blue');
       }, null],
       ['Organization', (r) => r.b2b_org, null],
-      ['Consigned', (r) => (r.b2b_consigned === true ? badge('yes', 'ok')
-        : r.b2b_consigned === false ? 'no' : null), null],
+      ['Consigned', (r) => bool(r.b2b_consigned, 'yes', 'no'), null],
       ['POS', (r) => r.pos, null],
       ['Account', (r) => r.account_id, 'id'],
       // Processor is dropped: SeatScouts on 596 of 608 sales, "Other" on 10,
@@ -1359,12 +1373,11 @@ async function loadBoard(g, sec, ok, bag) {
       if (s === 'SOLD') return badge('sold', 'blue');
       return s ? badge(s.toLowerCase(), 'warn') : null;
     }, null],
-    // Broadcast off means the listing is offered nowhere -- that earns a
-    // colour; the affirmative case is the quiet one.
-    ['Broadcast', (r) => (r.broadcast === true ? badge('on', 'ok')
-      : r.broadcast === false ? badge('off', 'bad') : null), null],
-    ['Autopricing', (r) => (r.autopricing === true ? badge('on', 'uptick')
-      : r.autopricing === false ? 'off' : null), null],
+    // Broadcast off means the listing is offered nowhere, and autopricing off
+    // means nothing is moving its price -- both are states worth reading at a
+    // glance, so both states are badged rather than only the negative.
+    ['Broadcast', (r) => bool(r.broadcast), null],
+    ['Autopricing', (r) => bool(r.autopricing), null],
     ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
     ['Stock', (r) => (r.stock_type
       ? String(r.stock_type).toLowerCase().replace(/_/g, ' ') : null), null],
