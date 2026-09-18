@@ -161,8 +161,11 @@
   #map .tile.sel   { fill: var(--pos); stroke: var(--ink); stroke-width: .5; }
   #map .lbl { font-family: var(--mono); font-size: 2.35px; fill: var(--ink-2); pointer-events: none; }
   #map .tile.sel + .lbl { fill: #fff; font-weight: 600; }
-  #map .court { fill: none; stroke: var(--line-strong); stroke-width: .3; stroke-dasharray: 1.2 .9; }
-  #map .courtlbl { font-family: var(--sans); font-size: 2.6px; fill: var(--ink-3); letter-spacing: .3px; }
+  /* Solid, not dashed: a dashed rule running behind the courtside strips read
+     as a collision rather than as a court. */
+  #map .court { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: .22; }
+  #map .courtline { fill: none; stroke: var(--line-strong); stroke-width: .18; opacity: .75; }
+  #map .courtlbl { font-family: var(--sans); font-size: 2.4px; fill: var(--ink-3); letter-spacing: .35px; }
   .legend {
     display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px 14px 12px;
     font-size: 11px; color: var(--ink-3); border-top: 1px solid var(--line);
@@ -364,7 +367,7 @@
 /* Bowl geometry, generated once from Target Center's published seat map and
    baked in: 22 lower-bowl sections (the arena does not have 101-138), 40 upper,
    10 courtside strips. Positions only -- every number on this page is live. */
-const VENUE = {"canvas":{"w":100.0,"h":70.0},"court":{"x":29.673,"y":24.159,"w":40.654,"h":21.682},"tiles":{"126":{"x":24.23,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"129":{"x":34.53,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"130":{"x":44.84,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"131":{"x":55.16,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"132":{"x":65.47,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"133":{"x":75.78,"y":12.24,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"136":{"x":84.58,"y":15.89,"w":6.39,"h":6.39,"a":45.0,"t":"lower"},"138":{"x":88.22,"y":24.69,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"101":{"x":88.22,"y":35.0,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"104":{"x":88.22,"y":45.31,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"106":{"x":84.58,"y":54.11,"w":6.39,"h":6.39,"a":135.0,"t":"lower"},"109":{"x":75.78,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"110":{"x":65.47,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"111":{"x":55.16,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"112":{"x":44.84,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"113":{"x":34.53,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"116":{"x":24.23,"y":57.76,"w":6.39,"h":6.39,"a":0.0,"t":"lower"},"118":{"x":15.43,"y":54.11,"w":6.39,"h":6.39,"a":45.0,"t":"lower"},"120":{"x":11.78,"y":45.31,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"121":{"x":11.78,"y":35.0,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"122":{"x":11.78,"y":24.69,"w":6.39,"h":6.39,"a":90.0,"t":"lower"},"124":{"x":15.43,"y":15.89,"w":6.39,"h":6.39,"a":135.0,"t":"lower"},"227":{"x":22.36,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"228":{"x":29.27,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"229":{"x":36.18,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"230":{"x":43.09,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"231":{"x":50.0,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"232":{"x":56.91,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"233":{"x":63.82,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"234":{"x":70.73,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"235":{"x":77.64,"y":3.07,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"236":{"x":83.54,"y":5.51,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"237":{"x":88.42,"y":10.4,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"238":{"x":93.31,"y":15.28,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"239":{"x":95.75,"y":21.18,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"240":{"x":95.75,"y":28.09,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"201":{"x":95.75,"y":35.0,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"202":{"x":95.75,"y":41.91,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"203":{"x":95.75,"y":48.82,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"204":{"x":93.31,"y":54.72,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"205":{"x":88.42,"y":59.6,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"206":{"x":83.54,"y":64.49,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"207":{"x":77.64,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"208":{"x":70.73,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"209":{"x":63.82,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"210":{"x":56.91,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"211":{"x":50.0,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"212":{"x":43.09,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"213":{"x":36.18,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"214":{"x":29.27,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"215":{"x":22.36,"y":66.93,"w":4.84,"h":4.84,"a":0.0,"t":"upper"},"216":{"x":16.46,"y":64.49,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"217":{"x":11.58,"y":59.6,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"218":{"x":6.69,"y":54.72,"w":4.84,"h":4.84,"a":45.0,"t":"upper"},"219":{"x":4.25,"y":48.82,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"220":{"x":4.25,"y":41.91,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"221":{"x":4.25,"y":35.0,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"222":{"x":4.25,"y":28.09,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"223":{"x":4.25,"y":21.18,"w":4.84,"h":4.84,"a":90.0,"t":"upper"},"224":{"x":6.69,"y":15.28,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"225":{"x":11.58,"y":10.4,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"226":{"x":16.46,"y":5.51,"w":4.84,"h":4.84,"a":135.0,"t":"upper"},"8":{"x":36.45,"y":22.36,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"9":{"x":50.0,"y":22.36,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"10":{"x":63.55,"y":22.36,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"3":{"x":63.55,"y":47.64,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"4":{"x":50.0,"y":47.64,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"5":{"x":36.45,"y":47.64,"w":12.45,"h":2.6,"a":0.0,"t":"floor"},"1":{"x":72.13,"y":29.58,"w":9.74,"h":2.6,"a":90.0,"t":"floor"},"2":{"x":72.13,"y":40.42,"w":9.74,"h":2.6,"a":90.0,"t":"floor"},"6":{"x":27.87,"y":40.42,"w":9.74,"h":2.6,"a":90.0,"t":"floor"},"7":{"x":27.87,"y":29.58,"w":9.74,"h":2.6,"a":90.0,"t":"floor"}}};
+const VENUE = {"canvas":{"w":100.0,"h":70.0},"court":{"x":34.75,"y":26.888,"w":30.5,"h":16.223},"tiles":{"1":{"x":66.7,"y":39.28,"w":8.74,"h":3.0,"a":111.9,"t":"floor"},"2":{"x":56.96,"y":45.42,"w":9.46,"h":3.0,"a":169.2,"t":"floor"},"3":{"x":45.01,"y":46.1,"w":9.97,"h":3.0,"a":180.0,"t":"floor"},"4":{"x":33.58,"y":45.42,"w":9.46,"h":3.0,"a":-169.2,"t":"floor"},"5":{"x":24.56,"y":39.28,"w":8.74,"h":3.0,"a":-111.9,"t":"floor"},"6":{"x":24.56,"y":27.72,"w":8.74,"h":3.0,"a":-68.1,"t":"floor"},"7":{"x":33.58,"y":21.58,"w":9.46,"h":3.0,"a":-10.8,"t":"floor"},"8":{"x":45.01,"y":20.9,"w":9.97,"h":3.0,"a":-0.0,"t":"floor"},"9":{"x":56.96,"y":21.58,"w":9.46,"h":3.0,"a":10.8,"t":"floor"},"10":{"x":66.7,"y":27.72,"w":8.74,"h":3.0,"a":68.1,"t":"floor"},"101":{"x":78.33,"y":36.56,"w":6.47,"h":5.0,"a":91.7,"t":"lower"},"104":{"x":77.35,"y":44.48,"w":5.38,"h":5.0,"a":116.8,"t":"lower"},"106":{"x":71.2,"y":49.77,"w":5.8,"h":5.0,"a":156.3,"t":"lower"},"109":{"x":63.0,"y":51.69,"w":6.46,"h":5.0,"a":173.2,"t":"lower"},"110":{"x":54.77,"y":52.16,"w":6.72,"h":5.0,"a":178.9,"t":"lower"},"111":{"x":46.59,"y":52.2,"w":6.81,"h":5.0,"a":180.0,"t":"lower"},"112":{"x":38.51,"y":52.16,"w":6.72,"h":5.0,"a":-178.9,"t":"lower"},"113":{"x":30.53,"y":51.69,"w":6.46,"h":5.0,"a":-173.2,"t":"lower"},"116":{"x":22.99,"y":49.77,"w":5.8,"h":5.0,"a":-156.3,"t":"lower"},"118":{"x":17.27,"y":44.48,"w":5.38,"h":5.0,"a":-116.8,"t":"lower"},"120":{"x":15.19,"y":36.56,"w":6.47,"h":5.0,"a":-91.7,"t":"lower"},"121":{"x":15.19,"y":28.44,"w":6.47,"h":5.0,"a":-88.3,"t":"lower"},"122":{"x":17.27,"y":20.52,"w":5.38,"h":5.0,"a":-63.2,"t":"lower"},"124":{"x":22.99,"y":15.23,"w":5.8,"h":5.0,"a":-23.7,"t":"lower"},"126":{"x":30.53,"y":13.31,"w":6.46,"h":5.0,"a":-6.8,"t":"lower"},"129":{"x":38.51,"y":12.84,"w":6.72,"h":5.0,"a":-1.1,"t":"lower"},"130":{"x":46.59,"y":12.8,"w":6.81,"h":5.0,"a":-0.0,"t":"lower"},"131":{"x":54.77,"y":12.84,"w":6.72,"h":5.0,"a":1.1,"t":"lower"},"132":{"x":63.0,"y":13.31,"w":6.46,"h":5.0,"a":6.8,"t":"lower"},"133":{"x":71.2,"y":15.23,"w":5.8,"h":5.0,"a":23.7,"t":"lower"},"136":{"x":77.35,"y":20.52,"w":5.38,"h":5.0,"a":63.2,"t":"lower"},"138":{"x":78.33,"y":28.44,"w":6.47,"h":5.0,"a":88.3,"t":"lower"},"201":{"x":89.39,"y":35.66,"w":5.22,"h":4.8,"a":90.2,"t":"upper"},"202":{"x":89.36,"y":41.77,"w":5.0,"h":4.8,"a":93.7,"t":"upper"},"203":{"x":88.62,"y":47.8,"w":4.57,"h":4.8,"a":106.3,"t":"upper"},"204":{"x":85.92,"y":53.17,"w":4.32,"h":4.8,"a":130.7,"t":"upper"},"205":{"x":80.91,"y":56.81,"w":4.6,"h":4.8,"a":154.0,"t":"upper"},"206":{"x":74.98,"y":58.75,"w":4.91,"h":4.8,"a":167.4,"t":"upper"},"207":{"x":68.85,"y":59.68,"w":5.08,"h":4.8,"a":174.4,"t":"upper"},"208":{"x":62.7,"y":60.06,"w":5.17,"h":4.8,"a":177.9,"t":"upper"},"209":{"x":56.56,"y":60.18,"w":5.23,"h":4.8,"a":179.5,"t":"upper"},"210":{"x":50.43,"y":60.2,"w":5.25,"h":4.8,"a":180.0,"t":"upper"},"211":{"x":44.32,"y":60.2,"w":5.25,"h":4.8,"a":-180.0,"t":"upper"},"212":{"x":38.21,"y":60.18,"w":5.23,"h":4.8,"a":-179.5,"t":"upper"},"213":{"x":32.13,"y":60.06,"w":5.17,"h":4.8,"a":-177.9,"t":"upper"},"214":{"x":26.07,"y":59.68,"w":5.08,"h":4.8,"a":-174.4,"t":"upper"},"215":{"x":20.11,"y":58.75,"w":4.91,"h":4.8,"a":-167.4,"t":"upper"},"216":{"x":14.48,"y":56.81,"w":4.6,"h":4.8,"a":-154.0,"t":"upper"},"217":{"x":9.76,"y":53.17,"w":4.32,"h":4.8,"a":-130.7,"t":"upper"},"218":{"x":6.8,"y":47.8,"w":4.57,"h":4.8,"a":-106.3,"t":"upper"},"219":{"x":5.65,"y":41.77,"w":5.0,"h":4.8,"a":-93.7,"t":"upper"},"220":{"x":5.39,"y":35.66,"w":5.22,"h":4.8,"a":-90.2,"t":"upper"},"221":{"x":5.39,"y":29.54,"w":5.22,"h":4.8,"a":-89.8,"t":"upper"},"222":{"x":5.65,"y":23.43,"w":5.0,"h":4.8,"a":-86.3,"t":"upper"},"223":{"x":6.8,"y":17.4,"w":4.57,"h":4.8,"a":-73.7,"t":"upper"},"224":{"x":9.76,"y":12.03,"w":4.32,"h":4.8,"a":-49.3,"t":"upper"},"225":{"x":14.48,"y":8.39,"w":4.6,"h":4.8,"a":-26.0,"t":"upper"},"226":{"x":20.11,"y":6.45,"w":4.91,"h":4.8,"a":-12.6,"t":"upper"},"227":{"x":26.07,"y":5.52,"w":5.08,"h":4.8,"a":-5.6,"t":"upper"},"228":{"x":32.13,"y":5.14,"w":5.17,"h":4.8,"a":-2.1,"t":"upper"},"229":{"x":38.21,"y":5.02,"w":5.23,"h":4.8,"a":-0.5,"t":"upper"},"230":{"x":44.32,"y":5.0,"w":5.25,"h":4.8,"a":-0.0,"t":"upper"},"231":{"x":50.43,"y":5.0,"w":5.25,"h":4.8,"a":0.0,"t":"upper"},"232":{"x":56.56,"y":5.02,"w":5.23,"h":4.8,"a":0.5,"t":"upper"},"233":{"x":62.7,"y":5.14,"w":5.17,"h":4.8,"a":2.1,"t":"upper"},"234":{"x":68.85,"y":5.52,"w":5.08,"h":4.8,"a":5.6,"t":"upper"},"235":{"x":74.98,"y":6.45,"w":4.91,"h":4.8,"a":12.6,"t":"upper"},"236":{"x":80.91,"y":8.39,"w":4.6,"h":4.8,"a":26.0,"t":"upper"},"237":{"x":85.92,"y":12.03,"w":4.32,"h":4.8,"a":49.3,"t":"upper"},"238":{"x":88.62,"y":17.4,"w":4.57,"h":4.8,"a":73.7,"t":"upper"},"239":{"x":89.36,"y":23.43,"w":5.0,"h":4.8,"a":86.3,"t":"upper"},"240":{"x":89.39,"y":29.54,"w":5.22,"h":4.8,"a":89.8,"t":"upper"}}};
 
 const SEASON = { from: '2026-10-01', to: '2027-06-30' };
 const DL = 'Datalake MCP', DLQ = 'DataLakeInternalQuery';
@@ -718,9 +721,14 @@ function drawMap() {
     return n;
   };
   const ct = VENUE.court;
-  svg.append(mk('rect', { x: ct.x, y: ct.y, width: ct.w, height: ct.h, rx: 1, class: 'court' }));
+  svg.append(mk('rect', { x: ct.x, y: ct.y, width: ct.w, height: ct.h, rx: .8, class: 'court' }));
+  // Halfway line and centre circle: enough for the middle of the map to read
+  // as a court at a glance, without pretending to be a court diagram.
+  svg.append(mk('line', {
+    x1: ct.x + ct.w / 2, y1: ct.y, x2: ct.x + ct.w / 2, y2: ct.y + ct.h, class: 'courtline',
+  }));
   const cl = mk('text', {
-    x: ct.x + ct.w / 2, y: ct.y + ct.h / 2 + 1, class: 'courtlbl', 'text-anchor': 'middle',
+    x: ct.x + ct.w / 2, y: ct.y + ct.h / 2 + 0.85, class: 'courtlbl', 'text-anchor': 'middle',
   });
   cl.textContent = 'COURT';
   svg.append(cl);
@@ -944,6 +952,37 @@ async function loadBoard(g, sec, ok, bag) {
   liveHere.forEach((l) => liveBy.set(key(l.row, l.quantity), l));
   const activeLake = lake.filter(onSale);
 
+  // The board is the UNION of both sources. A listing the marketplace is
+  // showing but the lake has not caught up on is the single most important row
+  // on this page -- rendering only the lake's rows hid it completely.
+  const matched = new Set();
+  lake.forEach((r) => {
+    const k = key(r.row, r.quantity);
+    if (liveBy.has(k)) matched.add(k);
+  });
+  const marketOnly = liveHere
+    .filter((l) => !matched.has(key(l.row, l.quantity)))
+    .map((l) => ({
+      market_only: true,
+      listing_id: l.id,
+      row: l.row,
+      quantity: l.quantity,
+      price: null,
+      market_price: Number(l.price) / 100,
+      seats: l.seats,
+      stock_type: l.stock_type,
+      in_hand_date: l.in_hand_date,
+      status: null, broadcast: null, autopricing: null,
+      total_cost: null, deleted_at: '', updated_at: null, org_id: null,
+      push_price: null, cmp: null, floor_px: null, ceiling_px: null,
+    }));
+  const rows = lake.concat(marketOnly);
+  const marketPrice = (r) => {
+    if (r.market_only) return r.market_price;
+    const m = liveBy.get(key(r.row, r.quantity));
+    return m ? Number(m.price) / 100 : null;
+  };
+
   $('#b2bsub').textContent = activeLake.length + ' live in the lake · ' +
     (liveErr ? 'marketplace unavailable' : liveHere.length + ' on the marketplace');
 
@@ -954,31 +993,34 @@ async function loadBoard(g, sec, ok, bag) {
     return;
   }
 
-  table('#b2bbody', lake, [
+  table('#b2bbody', rows, [
     ['Row', (r) => r.row, 'em'],
     ['Qty', (r) => num(r.quantity), 'num'],
     ['Lake price', (r) => money(r.price), 'num'],
-    ['Marketplace price', (r) => {
-      const m = liveBy.get(key(r.row, r.quantity));
-      return m ? money(Number(m.price) / 100) : null;
-    }, 'num'],
+    ['Marketplace price', (r) => money(marketPrice(r)), 'num'],
     ['Agree', (r) => {
-      const m = liveBy.get(key(r.row, r.quantity));
-      if (!m) {
+      if (r.market_only) {
+        return el('span', { className: 'flag', textContent: 'not in lake' });
+      }
+      const mp = marketPrice(r);
+      if (mp === null) {
         if (String(r.deleted_at || '').trim()) {
           return el('span', { className: 'miss', textContent: 'n/a — deleted' });
         }
         if (!onSale(r)) return el('span', { className: 'miss', textContent: 'n/a — ' + (r.status || '?').toLowerCase() });
         return el('span', { className: 'flag', textContent: 'not on marketplace' });
       }
-      const d = Number(m.price) / 100 - Number(r.price);
+      const d = mp - Number(r.price);
       return Math.abs(d) < 0.01
         ? el('span', { className: 'flag ok', textContent: 'match' })
         : el('span', { className: 'flag', textContent: (d > 0 ? '+' : '') + d.toFixed(2) });
     }, null],
-    ['Status', (r) => (String(r.deleted_at || '').trim()
-      ? el('span', { className: 'flag', textContent: 'deleted' })
-      : r.status), null],
+    ['Status', (r) => {
+      if (r.market_only) return el('span', { className: 'flag', textContent: 'marketplace only' });
+      return String(r.deleted_at || '').trim()
+        ? el('span', { className: 'flag', textContent: 'deleted' })
+        : r.status;
+    }, null],
     ['Broadcast', (r) => (r.broadcast === true ? 'yes' : r.broadcast === false ? 'no' : null), null],
     ['Autopricing', (r) => (r.autopricing === true ? 'on' : r.autopricing === false ? 'off' : null), null],
     ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
@@ -987,6 +1029,7 @@ async function loadBoard(g, sec, ok, bag) {
     // is a JSON column whose parquet holds arrays, and selecting it at all
     // fails the read (INCORRECT_DATA).
     ['Seats', (r) => {
+      if (r.market_only) return r.seats;
       const m = liveBy.get(key(r.row, r.quantity));
       return m ? m.seats : null;
     }, 'id'],
@@ -996,7 +1039,8 @@ async function loadBoard(g, sec, ok, bag) {
   ], (liveErr
       ? '<b>' + esc(explain(liveErr).h) + '.</b> ' + esc(explain(liveErr).p) + ' The lake column still reads live. '
       : 'Two independent paths to the same board: <b>lake price</b> from <code>mcp_lysted_listings</code> (dollars) and <b>marketplace price</b> from the B2B connector (cents, converted). ') +
-    'They are snapshots taken moments apart, so a difference is a timing gap or a listing that is no longer broadcast — both are shown rather than hidden. Only <code>ACTIVE</code> and <code>READY</code> rows are on sale; <code>SOLD</code> rows are kept here because they explain an empty board.');
+    'Every row from either source appears, matched on row + quantity. <b>not in lake</b> means the marketplace is showing a listing the lake has not caught up on; ' +
+    '<b>not on marketplace</b> is the reverse. Only <code>ACTIVE</code> and <code>READY</code> rows are on sale — <code>SOLD</code> and deleted rows are kept because they explain an empty board.');
 
   const priced = lake.filter((r) => r.push_price !== null && r.push_price !== undefined);
   $('#upsub').textContent = priced.length + ' of ' + lake.length + ' listings carry Uptick pricing';

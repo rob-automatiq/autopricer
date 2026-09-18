@@ -5,31 +5,32 @@ a path the page can reach.
 
 ## `venue_geometry.py`
 
-Generates `artifact/venue.json` — the bowl positions the page draws. It is the
-one piece of the retired Python worth keeping executable, because the geometry
-is derived rather than transcribed, and regenerating it beats hand-editing
-coordinates.
+Generates `artifact/venue.json` — the bowl positions the page draws. Kept
+executable because the geometry is derived rather than transcribed, and
+regenerating beats hand-editing coordinates.
 
 ```bash
-python3 - <<'PY'
-import json, sys
-sys.path.insert(0, "reference")
-import venue_geometry as v
-out = {
-    "canvas": v.canvas(),
-    "court": v.court(),
-    "tiles": {k: {"x": round(t["x"], 2), "y": round(t["y"], 2),
-                  "w": round(t["w"], 2), "h": round(t["h"], 2),
-                  "a": round(t["angle"], 1), "t": t["tier"]}
-              for k, t in v.layout().items()},
-}
-open("artifact/venue.json", "w").write(json.dumps(out, separators=(",", ":")))
-print(len(out["tiles"]), "sections")
-PY
+python3 reference/venue_geometry.py            # writes artifact/venue.json
+python3 reference/venue_geometry.py --check     # geometry report, writes nothing
 ```
 
-Edges are derived from section counts so that each edge is exactly
-`count × spacing` long — that proportionality is what keeps the spacing even
-across the 45° corners, and tiles are capped at 0.7071 × spacing so a corner
-tile cannot clip its flat-edge neighbours. 22 lower-bowl sections, 40 upper, 10
-courtside strips.
+The one fact the layout rests on: **all three rings are numbered clockwise from
+due east**, in plain numeric order — 22 lower-bowl sections (the arena does not
+have 101-138), 40 upper, 10 courtside strips.
+
+Each ring is laid on a **superellipse** (a rounded rectangle, which is the shape
+an arena bowl is) with sections spaced by **equal arc length**, so the gap
+between neighbours is the same on a straight run as through a corner. Tile width
+is reduced by the local turn: rectangles on a curving path converge on their
+inner edge, by `depth × dθ / 2` around a bend, and a single fixed width is what
+wedged the corner tiles together in the first version.
+
+`--check` is the thing to trust, not the eye. It fails on any tile leaving the
+canvas, any overlapping pair (separating-axis, because an axis-aligned test
+overstates a rotated tile by up to 40%), a courtside strip touching the court,
+or a ring whose centre spacing varies by more than 12%. It currently reports
+zero faults, 1.66 units of court clearance, and spacing spread under 4.5%.
+
+An earlier version placed tiles on an octagon and snapped corner tiles to 45°,
+which produced diamonds wedged between squares with collisions at the bends.
+There are no corners to special-case in this approach.
