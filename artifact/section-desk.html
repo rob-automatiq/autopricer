@@ -19,6 +19,8 @@
     --b2b:      #1c6b57;
     --b2b-soft: #e2efea;
     --retail:   #8a6524;
+    --lake:      #8a6a08;
+    --lake-soft: #fbf0cf;
     --retail-soft: #f3ece0;
 
     --ok:   #1c6b57;
@@ -45,6 +47,8 @@
       --b2b:      #6bc4a8;
       --b2b-soft: #162a24;
       --retail:   #d4a862;
+      --lake:      #e8c25c;
+      --lake-soft: #33290d;
       --retail-soft: #2b2417;
       --ok:   #6bc4a8;
       --warn: #d4a862;
@@ -67,6 +71,8 @@
     --b2b:      #6bc4a8;
     --b2b-soft: #162a24;
     --retail:   #d4a862;
+    --lake:      #e8c25c;
+    --lake-soft: #33290d;
     --retail-soft: #2b2417;
     --ok:   #6bc4a8;
     --warn: #d4a862;
@@ -246,16 +252,16 @@
     border: 1px solid transparent;
   }
   .badge + .badge { margin-left: 4px; }
+  /* No grey badges: a badge that reads as disabled looks like missing data.
+     Anything that does not earn a colour is plain text instead. */
   .b-b2b    { background: var(--b2b-soft);    color: var(--b2b); }
   .b-uptick { background: var(--pos-soft);    color: var(--pos); }
   .b-retail { background: var(--retail-soft); color: var(--retail); }
-  /* The lake is where the record is kept, not a marketplace, so it stays
-     neutral rather than taking a fourth hue. */
-  .b-lake   { background: var(--surface-2); color: var(--ink-2); border-color: var(--line-strong); }
+  .b-lake   { background: var(--lake-soft);   color: var(--lake); }
   .b-ok     { background: var(--b2b-soft);    color: var(--ok); }
-  .b-warn   { background: var(--retail-soft); color: var(--warn); }
+  .b-warn   { background: var(--lake-soft);   color: var(--lake); }
+  .b-blue   { background: var(--pos-soft);    color: var(--pos); }
   .b-bad    { background: var(--bad-soft);    color: var(--bad); }
-  .b-mute   { color: var(--ink-3); border-color: var(--line); }
 
   /* ---------------------------------------------------------- notes */
   .note {
@@ -417,8 +423,6 @@ function badges(list) {
   items.forEach(([text, kind]) => frag.append(badge(text, kind)));
   return frag;
 }
-const yesNo = (v, yes, no) => (v === true ? badge(yes, 'ok')
-  : v === false ? badge(no, 'mute') : null);
 
 /* ------------------------------------------------------------- helpers */
 const BOWL_PREFIX = /^(lower|upper|club|suite|main|balcony|mezzanine)\s+(level|lvl)\s+/i;
@@ -1009,15 +1013,16 @@ async function loadSales(g, sec, ok, bag) {
       ['Marketplace', (r) => r.marketplace, null],
       ['Type', (r) => r.sale_type, null],
       ['Uptick-priced', (r) => (r.priced_by_uptick === true ? badge('yes', 'uptick')
-        : r.priced_by_uptick === false ? badge('no', 'mute') : null), null],
+        : r.priced_by_uptick === false ? 'no' : null), null],
       ['Fulfilment', (r) => {
         const f = String(r.b2b_fulfilment || '').toUpperCase();
         if (!f) return null;
         return badge(f.toLowerCase(),
-          f === 'COMPLETE' ? 'ok' : f === 'PENDING' ? 'warn' : 'mute');
+          f === 'COMPLETE' ? 'ok' : f === 'PENDING' ? 'warn' : 'blue');
       }, null],
       ['Organization', (r) => r.b2b_org, null],
-      ['Consigned', (r) => yesNo(r.b2b_consigned, 'yes', 'no'), null],
+      ['Consigned', (r) => (r.b2b_consigned === true ? badge('yes', 'ok')
+        : r.b2b_consigned === false ? 'no' : null), null],
       ['POS', (r) => r.pos, null],
       ['Account', (r) => r.account_id, 'id'],
       ['Processor', (r) => r.processor, null],
@@ -1076,10 +1081,15 @@ async function loadBoard(g, sec, ok, bag) {
      $111.63 and B2B shows as 6 at $118.49. Keying the match on row+quantity
      split it into "lake, not on B2B" plus "B2B, not in lake", so a listing
      that is present in both looked like one missing and one phantom. */
-  const rowKey = (row) => String(row || '').trim().toUpperCase();
-  const pool = new Map();            // row -> unclaimed B2B listings
+  // Key on SECTION + row. Keying on row alone let a lake listing in one
+  // section claim a marketplace listing from another -- section 124 row K took
+  // section 111 row G's listing, which showed up as a quantity mismatch and a
+  // -75% markup on two unrelated seats.
+  const rowKey = (sec, row) =>
+    (secKey(sec) || '?') + '|' + String(row || '').trim().toUpperCase();
+  const pool = new Map();            // section+row -> unclaimed B2B listings
   liveHere.forEach((l) => {
-    const k = rowKey(l.row);
+    const k = rowKey(l.section, l.row);
     if (!pool.has(k)) pool.set(k, []);
     pool.get(k).push(l);
   });
@@ -1089,7 +1099,7 @@ async function loadBoard(g, sec, ok, bag) {
   // marketplace listing away from the row that is actually on sale.
   const matchOf = new Map();
   [...lake].sort((a, b) => (onSale(b) ? 1 : 0) - (onSale(a) ? 1 : 0)).forEach((r) => {
-    const cands = pool.get(rowKey(r.row));
+    const cands = pool.get(rowKey(r.section, r.row));
     if (!cands || !cands.length) return;
     const want = Number(r.price);
     let bestI = 0;
@@ -1191,10 +1201,12 @@ async function loadBoard(g, sec, ok, bag) {
         : num(q);
     }, 'num'],
     // One listing, one row, every system's price for it side by side.
+    // A 0 in any of these price columns means "not set", so it prints as a
+    // dash. Showing "$0.00" read as a free ticket and as an at-floor listing.
     ['B2B shows', (r) => money(b2bShows(r)), 'num'],
     ['B2B connector', (r) => money(marketPrice(r)), 'num'],
-    ['Lake list', (r) => money(r.price), 'num'],
-    ['Uptick push', (r) => money(r.push_price), 'num'],
+    ['Lake list', (r) => money(zeroIsUnknown(r.price)), 'num'],
+    ['Uptick push', (r) => money(zeroIsUnknown(r.push_price)), 'num'],
     // Presence, not price. The marketplace figure sits above the lake's list
     // price by a per-listing markup, so a price-equality test would flag every
     // healthy row as a mismatch. The markup itself gets its own column.
@@ -1208,34 +1220,38 @@ async function loadBoard(g, sec, ok, bag) {
       (r.push_price !== null && r.push_price !== undefined) && ['Uptick', 'uptick'],
     ]), null],
     ['Markup', (r) => {
-      const shown = b2bShows(r), list = Number(r.price);
-      if (shown === null || !Number.isFinite(list) || list <= 0) return null;
-      return '+' + ((shown / list - 1) * 100).toFixed(1) + '%';
+      const shown = b2bShows(r), list = zeroIsUnknown(r.price);
+      if (shown === null || list === null) return null;
+      const pct = (shown / list - 1) * 100;
+      return (pct >= 0 ? '+' : '−') + Math.abs(pct).toFixed(1) + '%';
     }, 'num'],
-    ['Comp (cmp)', (r) => money(r.cmp), 'num'],
-    ['Floor', (r) => money(r.floor_px), 'num'],
-    ['Ceiling', (r) => money(r.ceiling_px), 'num'],
+    ['Comp (cmp)', (r) => money(zeroIsUnknown(r.cmp)), 'num'],
+    ['Floor', (r) => money(zeroIsUnknown(r.floor_px)), 'num'],
+    ['Ceiling', (r) => money(zeroIsUnknown(r.ceiling_px)), 'num'],
     ['At floor', (r) => {
-      if (r.push_price === null || r.push_price === undefined) return null;
-      return (Number(r.floor_px) > 0 && Number(r.push_price) <= Number(r.floor_px) + 0.005)
-        ? badge('at floor', 'warn') : badge('above floor', 'mute');
+      const push = zeroIsUnknown(r.push_price), floor = zeroIsUnknown(r.floor_px);
+      if (push === null || floor === null) return null;
+      return push <= floor + 0.005 ? badge('at floor', 'warn') : badge('above floor', 'ok');
     }, null],
-    ['Mode', (r) => (r.group_mode ? badge(r.group_mode.toLowerCase(), 'mute') : null), null],
+    ['Mode', (r) => (r.group_mode ? String(r.group_mode).toLowerCase() : null), null],
     ['Priced at', (r) => (r.priced_at || '').slice(0, 16), 'id'],
     ['Status', (r) => {
       if (r.market_only) return null;          // the missing Lake badge says it
       if (String(r.deleted_at || '').trim()) return badge('deleted', 'bad');
       const s = String(r.status || '').toUpperCase();
       if (s === 'ACTIVE' || s === 'READY') return badge(s.toLowerCase(), 'ok');
-      if (s === 'SOLD') return badge('sold', 'mute');
+      if (s === 'SOLD') return badge('sold', 'blue');
       return s ? badge(s.toLowerCase(), 'warn') : null;
     }, null],
-    ['Broadcast', (r) => yesNo(r.broadcast, 'on', 'off'), null],
+    // Broadcast off means the listing is offered nowhere -- that earns a
+    // colour; the affirmative case is the quiet one.
+    ['Broadcast', (r) => (r.broadcast === true ? badge('on', 'ok')
+      : r.broadcast === false ? badge('off', 'bad') : null), null],
     ['Autopricing', (r) => (r.autopricing === true ? badge('on', 'uptick')
-      : r.autopricing === false ? badge('off', 'mute') : null), null],
+      : r.autopricing === false ? 'off' : null), null],
     ['Cost total', (r) => money(zeroIsUnknown(r.total_cost)), 'num'],
     ['Stock', (r) => (r.stock_type
-      ? badge(String(r.stock_type).toLowerCase().replace(/_/g, ' '), 'mute') : null), null],
+      ? String(r.stock_type).toLowerCase().replace(/_/g, ' ') : null), null],
     // Seats come from the marketplace, not the lake: mcp_lysted_listings.seats
     // is a JSON column whose parquet holds arrays, and selecting it at all
     // fails the read (INCORRECT_DATA).
@@ -1255,7 +1271,7 @@ async function loadBoard(g, sec, ok, bag) {
     '<b>Lake list price</b> is the broker’s own price in <code>mcp_lysted_listings</code>; the step from it to the displayed figure is a <b>per-listing markup</b> and is not derivable ' +
     '(<code>mcp_sync_markups_and_exchange_fees</code> holds company-level medians and is mostly empty), so it is shown as its own column rather than folded in. ' +
     '<b>Uptick push</b> is what the autopricer last decided (<code>mcp_uptick_pricing</code>, joined on <code>listing_id = lysted_listings.id</code>) — a <b>daily snapshot</b>, every row stamped the same <code>calculated_at</code>, so it lags a listing repriced since. ' +
-    'Every listing from any source appears, matched on <b>row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
+    'Every listing from any source appears, matched on <b>section + row</b> and then by nearest price — <b>never on quantity</b>, because the systems disagree about it: section 235 row U is one listing the lake holds as <b>10 tickets</b> and B2B shows as <b>6</b>. ' +
     'That is why there are two quantity columns, with the B2B one flagged when it differs. ' +
     'The <b>In</b> badges say which systems carry the listing — a source with no badge does not have it, which is a different question from whether the prices or quantities agree. ' +
     'Only <b>active</b> and <b>ready</b> rows are on sale; <b>sold</b> and <b>deleted</b> rows are kept because they explain an empty board.');
@@ -1366,7 +1382,7 @@ async function loadRetail(g, sec, ok, bag) {
       ['Ask', (r) => money(r.price), 'num'],
       ['All-in / tkt', (r) => money(r.all_in_per_ticket), 'num'],
       ['View score', (r) => (r.view_score === null || r.view_score === undefined ? null : Number(r.view_score).toFixed(1)), 'num'],
-      ['Ticket type', (r) => (r.ticket_type ? badge(String(r.ticket_type).toLowerCase(), 'mute') : null), null],
+      ['Ticket type', (r) => (r.ticket_type ? String(r.ticket_type).toLowerCase() : null), null],
       ['Transfer', (r) => (r.transfer_type ? badge(String(r.transfer_type).toLowerCase(), 'retail') : null), null],
       ['Section label', (r) => r.section_name, null],
       ['Inventory id', (r) => r.inventory_id, 'id'],
